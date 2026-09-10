@@ -51,6 +51,34 @@ This is the first part of screen-reader support. Windows testing with NVDA
 remains tracked in [#262](https://github.com/crmne/fastpotify/issues/262).
 Winamp skins do not yet have equivalent accessibility coverage.
 
+### Optional Vim keys
+
+Turn on **Settings → Keyboard → Vim keys** for non-modal list navigation.
+The setting defaults to off and does not change existing shortcuts until enabled.
+Text fields, focused controls, menus, and dialogs keep their normal keyboard input.
+
+Use `h` and `l` to focus the visible library, main list, or queue pane. Its
+outline marks the active pane. `j` and `k` select rows in display order and
+scroll them into view. `gg` selects the first row; `G` (`Shift+g`) selects the
+last. The two `g` presses must be within 750 ms, without another key between.
+`Ctrl+d` and `Ctrl+u` move half the visible pane height. These two shortcuts
+use Control on macOS too, not Command.
+
+`Enter` plays the selected song. In the library it opens the selected entry
+or expands/collapses a folder. `o` opens a song's album, an episode's show,
+or the selected library entry. `Esc` clears selection. Bare `l` now moves
+right, so **Shift+L** opens lyrics instead. `/` still focuses search.
+
+Navigation covers collection tables, search-result songs, artist Popular
+tracks, library rows, and the queue and Recent panel. Card grids are not yet
+covered. Search and Popular preview sections navigate only the rows shown.
+On a partially loaded list, `G` requests remaining pages through the normal
+loader and follows the end as they arrive. Another navigation key cancels
+the end jump; loading errors stop it. Playing a queue selection skips to that
+position, removing preceding rows and preserving the rows below it, exactly
+like clicking the row. Queue changes clear the keyboard cursor so duplicate
+songs cannot leave a stale positional selection.
+
 ## Library order
 
 On `main`, after 0.7.1, the menu below the Library filters selects an order

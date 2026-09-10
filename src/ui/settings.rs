@@ -478,6 +478,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         });
     });
 
+    section(ui, &palette, "Keyboard", |ui| {
+        widgets::setting_row(
+            ui,
+            &palette,
+            "Vim keys",
+            "h/l: panes · j/k: rows · gg/G: first/last · Ctrl+d/u: half-page · Enter: play/open · o: album · Esc: clear · Shift+L: lyrics",
+            |ui| {
+                if widgets::switch(ui, &palette, "Vim keys", &mut app.settings.vim_keys).changed() {
+                    changed = true;
+                }
+            },
+        );
+    });
+
     section(ui, &palette, "Appearance", |ui| {
         widgets::setting_row(ui, &palette, "Theme", "", |ui| {
             ui.horizontal(|ui| {

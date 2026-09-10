@@ -536,8 +536,81 @@ pub fn table(app: &mut App, ui: &mut egui::Ui, table: Table<'_>) {
     // count changes.
     let view = format!("{sort:?}|{needle}|{}", entry.visible.len());
     app.keep_picked_rows_for(&table.page, &view);
-    let picked: std::collections::BTreeSet<usize> =
+    let owner = ui.id().with((&table.page, format!("{sort:?}|{needle}")));
+    let key_at = |row: usize| egui::Id::new(table.items[entry.visible[row]].0.uri());
+    let navigation = super::navigation::view(
+        app,
+        ui,
+        super::navigation::Pane::Main,
+        owner,
+        entry.visible.len(),
+        row_height,
+        key_at,
+    );
+    navigation.scroll_rows(ui, 0, entry.visible.len(), row_height);
+    navigation.finish_boundaries(
+        app,
+        super::navigation::Pane::Main,
+        (!table.loading && !table.can_load_more) || table.error.is_some(),
+        (!table.loading && table.row_offset == 0) || table.error.is_some(),
+    );
+    if navigation.command == Some(super::navigation::Command::First)
+        && table.row_offset > 0
+        && let Page::Playlist(id) = &table.page
+    {
+        app.actions.push(Action::JumpToPlaylistPosition {
+            id: id.clone(),
+            position: 1,
+        });
+    }
+    let mut picked: std::collections::BTreeSet<usize> =
         app.picked_rows(&table.page).cloned().unwrap_or_default();
+    if navigation.focused
+        && (navigation.changed
+            || navigation.command.is_some()
+            || navigation
+                .cursor
+                .row
+                .is_some_and(|row| !picked.contains(&row)))
+    {
+        picked = navigation.cursor.row.into_iter().collect();
+        app.actions.push(Action::KeyboardPick {
+            page: table.page.clone(),
+            view: view.clone(),
+            row: navigation.cursor.row,
+        });
+    }
+    if let Some(row) = navigation.cursor.row {
+        let index = entry.visible[row];
+        let item = &table.items[index].0;
+        match navigation.command {
+            Some(super::navigation::Command::Play) if super::navigation::can_play(item) => {
+                app.actions.push(Action::PlayFromRow {
+                    context: context.clone(),
+                    uri: item.uri().to_string(),
+                    index: if sorted {
+                        row
+                    } else {
+                        absolute_row_index(table.row_offset, index)
+                    } as u32,
+                })
+            }
+            Some(super::navigation::Command::Open) => {
+                if let Some(action) = super::navigation::album(item) {
+                    app.actions.push(action);
+                }
+            }
+            _ => {}
+        }
+    }
+    if navigation.focused
+        && navigation.cursor.end
+        && table.can_load_more
+        && !table.loading
+        && table.error.is_none()
+    {
+        app.actions.push(Action::LoadMore(table.page.clone()));
+    }
     // Keep complete rows for immediate optimistic playlist additions.
     let picked_songs: Vec<PlayableItem> = picked
         .iter()
@@ -585,10 +658,28 @@ pub fn table(app: &mut App, ui: &mut egui::Ui, table: Table<'_>) {
         }
     });
     if let Some((row, asked)) = pick {
-        app.pick_row(&table.page, &view, row, asked, rows);
+        if app.settings.vim_keys {
+            // Apply after the keyboard cursor actions emitted above, so a
+            // same-frame mouse click wins rather than being cleared by them.
+            app.actions.push(Action::PickTableRow {
+                page: table.page.clone(),
+                view: view.clone(),
+                row,
+                pick: asked,
+                len: rows,
+                owner,
+                key: key_at(row),
+            });
+        } else {
+            // Preserve the existing mouse-only path and its action stream.
+            app.pick_row(&table.page, &view, row, asked, rows);
+        }
     }
     // Escape clears the current selection.
-    if !picked.is_empty() && ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+    if !app.settings.vim_keys
+        && !picked.is_empty()
+        && ui.input(|input| input.key_pressed(egui::Key::Escape))
+    {
         app.clear_picked_rows();
     }
     if let Some(slot) = move_slot {

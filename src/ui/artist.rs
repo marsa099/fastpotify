@@ -113,8 +113,22 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, id: &str) {
                     let items: Vec<PlayableItem> =
                         tracks.iter().cloned().map(PlayableItem::Track).collect();
                     let limit = if page.show_all_top { items.len() } else { 5 };
+                    let owner = ui.id().with(("artist-popular", id));
+                    let row_height = if app.settings.tracklist_compact {
+                        theme::THIN_ROW_HEIGHT
+                    } else {
+                        theme::ROW_HEIGHT
+                    };
+                    let navigation = super::navigation::playable_view(
+                        app,
+                        ui,
+                        owner,
+                        &items[..items.len().min(limit)],
+                        &context,
+                        row_height + ui.spacing().item_spacing.y,
+                    );
                     for (index, item) in items.iter().take(limit).enumerate() {
-                        widgets::track_row(
+                        let picked = widgets::track_row(
                             ui,
                             app,
                             TrackRow {
@@ -130,10 +144,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, id: &str) {
                                 compact: false,
                                 thin: app.settings.tracklist_compact,
                                 shift: 0.0,
-                                picked: false,
+                                picked: navigation.picked(index),
                                 picked_songs: &[],
                             },
                         );
+                        if picked.is_some() {
+                            super::navigation::pick(
+                                app,
+                                super::navigation::Pane::Main,
+                                owner,
+                                index,
+                                egui::Id::new(item.uri()),
+                            );
+                        }
                     }
                     if items.len() > 5 {
                         ui.add_space(6.0);

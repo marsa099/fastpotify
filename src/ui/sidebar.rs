@@ -855,6 +855,51 @@ fn contents(app: &mut App, ui: &mut egui::Ui) {
             } else {
                 DEFAULT_ROW_HEIGHT
             };
+            let owner = ui
+                .id()
+                .with(format!("library|{filter:?}|{sort:?}|{needle}"));
+            let key_at = |row: usize| egui::Id::new(entries[row].ordering_key());
+            let navigation = super::navigation::view(
+                app,
+                ui,
+                super::navigation::Pane::Sidebar,
+                owner,
+                entries.len(),
+                row_height,
+                key_at,
+            );
+            navigation.scroll_rows(ui, 0, entries.len(), row_height);
+            let fetching = match filter {
+                Filter::Playlists => loading,
+                Filter::Albums => app.library.albums.loading,
+                Filter::Artists => app.library.artists.loading,
+                Filter::Podcasts => app.library.shows.loading,
+            };
+            navigation.finish_boundaries(
+                app,
+                super::navigation::Pane::Sidebar,
+                (more_page.is_none() && !fetching) || error.is_some(),
+                true,
+            );
+            if let Some(row) = navigation.cursor.row
+                && matches!(
+                    navigation.command,
+                    Some(super::navigation::Command::Play | super::navigation::Command::Open)
+                )
+            {
+                let entry = &entries[row];
+                app.actions.push(if let Some((id, _, _)) = &entry.folder {
+                    Action::ToggleLibraryFolder(id.clone())
+                } else {
+                    Action::Open(entry.page.clone())
+                });
+            }
+            if navigation.focused
+                && navigation.cursor.end
+                && let Some(page) = &more_page
+            {
+                app.actions.push(Action::LoadMore(page.clone()));
+            }
             // Calculate drop positions from fixed row height because rows shift
             // before drawing.
             let list_top = ui.cursor().top();
@@ -954,6 +999,14 @@ fn contents(app: &mut App, ui: &mut egui::Ui) {
                             rect,
                             CornerRadius::same(6),
                             palette.surface_hover.gamma_multiply(0.6),
+                        );
+                    }
+                    if navigation.picked(index) {
+                        ui.painter().rect_stroke(
+                            rect,
+                            CornerRadius::same(6),
+                            egui::Stroke::new(2.0, palette.accent),
+                            egui::StrokeKind::Inside,
                         );
                     }
                     if drop_hover {
@@ -1180,13 +1233,16 @@ fn contents(app: &mut App, ui: &mut egui::Ui) {
                 }
                 theme::focus_ring(ui, &response);
                 if response.clicked() {
-                    if let Some((folder_id, collapsed, _)) = &entry.folder {
-                        if *collapsed {
-                            app.collapsed_folders.retain(|held| held != folder_id);
-                        } else {
-                            app.collapsed_folders.push(folder_id.clone());
-                        }
-                        app.session_dirty = true;
+                    super::navigation::pick(
+                        app,
+                        super::navigation::Pane::Sidebar,
+                        owner,
+                        index,
+                        key_at(index),
+                    );
+                    if let Some((folder_id, _, _)) = &entry.folder {
+                        app.actions
+                            .push(Action::ToggleLibraryFolder(folder_id.clone()));
                     } else {
                         app.actions.push(Action::Open(entry.page.clone()));
                     }

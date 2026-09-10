@@ -664,6 +664,7 @@ pub fn apply_flags(app: &mut App, page: Option<&str>, show: Option<&str>) {
                 app.actions.push(Action::SettingsChanged);
             }
             "focus" => app.settings.sidebar_visible = false,
+            "vim-keys" => app.settings.vim_keys = true,
             // A cold start: no device is playing anything, and all the app
             // has is the song the last session ended on.
             "resume" => {

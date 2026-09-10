@@ -9,6 +9,7 @@ mod keys;
 pub mod library;
 pub mod login;
 mod lyrics;
+pub mod navigation;
 pub mod player_bar;
 pub mod queue;
 pub mod search;

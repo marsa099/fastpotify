@@ -214,6 +214,53 @@ fn contents(app: &mut App, ui: &mut egui::Ui, compact: bool) {
         );
         ui.add_space(14.0);
     }
+    let pane = if compact {
+        super::navigation::Pane::Queue
+    } else {
+        super::navigation::Pane::Main
+    };
+    let keys: Vec<_> = app
+        .queue
+        .get()
+        .into_iter()
+        .flat_map(|queue| &queue.queue)
+        .map(|item| egui::Id::new(item.uri()))
+        .collect();
+    // Queue positions have meaning even for duplicate songs. Invalidate the
+    // cursor whenever the order or count changes, rather than following a URI.
+    let owner = ui.id().with(("queue-navigation", &keys));
+    let navigation = super::navigation::view(
+        app,
+        ui,
+        pane,
+        owner,
+        keys.len(),
+        if compact {
+            theme::COMPACT_ROW_HEIGHT
+        } else {
+            theme::ROW_HEIGHT
+        },
+        |row| keys[row],
+    );
+    navigation.finish_boundaries(app, pane, true, true);
+    if let Some(row) = navigation.cursor.row
+        && let Some(item) = app.queue.get().and_then(|queue| queue.queue.get(row))
+    {
+        let action = match navigation.command {
+            Some(super::navigation::Command::Play) if super::navigation::can_play(item) => {
+                Some(Action::PlayFromRow {
+                    context: RowContext::Queue,
+                    uri: item.uri().to_string(),
+                    index: row as u32,
+                })
+            }
+            Some(super::navigation::Command::Open) => super::navigation::album(item),
+            _ => None,
+        };
+        if let Some(action) = action {
+            app.actions.push(action);
+        }
+    }
     if queue_is_empty(app) {
         widgets::empty_state(
             ui,
@@ -245,9 +292,10 @@ fn contents(app: &mut App, ui: &mut egui::Ui, compact: bool) {
         });
         ui.add_space(4.0);
         let gap = ui.spacing().item_spacing.y;
+        navigation.scroll_rows(ui, 0, queued_len, row_height + gap);
         widgets::virtual_rows(ui, queued_len, row_height + gap, |ui, index| {
             let width = ui.available_width();
-            queue_row(app, ui, index, compact);
+            queue_row(app, ui, index, compact, &navigation);
             ui.allocate_space(egui::vec2(width, gap));
         });
         ui.add_space(14.0);
@@ -255,8 +303,9 @@ fn contents(app: &mut App, ui: &mut egui::Ui, compact: bool) {
     if queue_len > queued_len {
         theme::text(ui, "Next up", theme::semibold(14.0), palette.text);
         ui.add_space(4.0);
+        navigation.scroll_rows(ui, queued_len, queue_len - queued_len, row_height);
         widgets::virtual_rows(ui, queue_len - queued_len, row_height, |ui, index| {
-            queue_row(app, ui, queued_len + index, compact);
+            queue_row(app, ui, queued_len + index, compact, &navigation);
         });
     }
 }
@@ -275,6 +324,42 @@ fn recents_contents(app: &mut App, ui: &mut egui::Ui) {
     let error = app.recents.error.clone();
     let complete = app.recents.complete;
     let loaded_once = app.recents.loaded_once;
+    let owner = ui.id().with("recents-navigation");
+    let navigation = super::navigation::view(
+        app,
+        ui,
+        super::navigation::Pane::Queue,
+        owner,
+        items.len(),
+        theme::COMPACT_ROW_HEIGHT,
+        |row| egui::Id::new((&items[row].track.uri, &items[row].played_at)),
+    );
+    navigation.finish_boundaries(
+        app,
+        super::navigation::Pane::Queue,
+        complete || error.is_some(),
+        true,
+    );
+    if let Some(row) = navigation.cursor.row {
+        let item = PlayableItem::Track(items[row].track.clone());
+        let action = match navigation.command {
+            Some(super::navigation::Command::Play) if super::navigation::can_play(&item) => {
+                Some(Action::PlayFromRow {
+                    context: RowContext::Uris(Arc::from([item.uri().to_string()])),
+                    uri: item.uri().to_string(),
+                    index: 0,
+                })
+            }
+            Some(super::navigation::Command::Open) => super::navigation::album(&item),
+            _ => None,
+        };
+        if let Some(action) = action {
+            app.actions.push(action);
+        }
+    }
+    if navigation.focused && navigation.cursor.end && !loading && !complete && error.is_none() {
+        app.actions.push(Action::LoadMoreRecents);
+    }
 
     if items.is_empty() {
         if loading {
@@ -319,13 +404,14 @@ fn recents_contents(app: &mut App, ui: &mut egui::Ui) {
     }
 
     let row_height = theme::COMPACT_ROW_HEIGHT;
+    navigation.scroll_rows(ui, 0, items.len(), row_height);
     // Build PlayableItems on the fly; virtual_rows needs stable index.
     widgets::virtual_rows(ui, items.len(), row_height, |ui, index| {
         let entry = &items[index];
         // Need owned PlayableItem for track_row; clone track.
         let item = PlayableItem::Track(entry.track.clone());
         let context = RowContext::Uris(Arc::from([entry.track.uri.clone()]));
-        widgets::track_row(
+        let picked = widgets::track_row(
             ui,
             app,
             TrackRow {
@@ -341,10 +427,19 @@ fn recents_contents(app: &mut App, ui: &mut egui::Ui) {
                 compact: true,
                 thin: false,
                 shift: 0.0,
-                picked: false,
+                picked: navigation.picked(index),
                 picked_songs: &[],
             },
         );
+        if picked.is_some() {
+            super::navigation::pick(
+                app,
+                super::navigation::Pane::Queue,
+                owner,
+                index,
+                egui::Id::new((&entry.track.uri, &entry.played_at)),
+            );
+        }
     });
 
     // Footer: loading more or load more trigger
@@ -369,7 +464,13 @@ fn recents_contents(app: &mut App, ui: &mut egui::Ui) {
 
 /// One row of the queue, numbered and indexed by its place in the whole
 /// queue, whichever section it sits in.
-fn queue_row(app: &mut App, ui: &mut egui::Ui, index: usize, compact: bool) {
+fn queue_row(
+    app: &mut App,
+    ui: &mut egui::Ui,
+    index: usize,
+    compact: bool,
+    navigation: &super::navigation::View,
+) {
     let Some(item) = app
         .queue
         .get()
@@ -378,7 +479,7 @@ fn queue_row(app: &mut App, ui: &mut egui::Ui, index: usize, compact: bool) {
     else {
         return;
     };
-    widgets::track_row(
+    let picked = widgets::track_row(
         ui,
         app,
         TrackRow {
@@ -394,8 +495,18 @@ fn queue_row(app: &mut App, ui: &mut egui::Ui, index: usize, compact: bool) {
             compact,
             thin: false,
             shift: 0.0,
-            picked: false,
+            picked: navigation.picked(index),
             picked_songs: &[],
         },
     );
+    if picked.is_some()
+        && let Some(owner) = navigation.cursor.owner
+    {
+        let pane = if compact {
+            super::navigation::Pane::Queue
+        } else {
+            super::navigation::Pane::Main
+        };
+        super::navigation::pick(app, pane, owner, index, egui::Id::new(item.uri()));
+    }
 }

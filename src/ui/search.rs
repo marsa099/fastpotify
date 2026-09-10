@@ -360,8 +360,22 @@ fn songs(app: &mut App, ui: &mut egui::Ui, results: &SearchResults, limit: usize
         .cloned()
         .map(PlayableItem::Track)
         .collect();
+    let owner = ui.id().with(("search-songs", &app.search.committed, limit));
+    let row_height = if limit == usize::MAX {
+        theme::ROW_HEIGHT
+    } else {
+        theme::COMPACT_ROW_HEIGHT
+    };
+    let navigation = super::navigation::playable_view(
+        app,
+        ui,
+        owner,
+        &items[..items.len().min(limit)],
+        &context,
+        row_height + ui.spacing().item_spacing.y,
+    );
     for (index, item) in items.iter().take(limit).enumerate() {
-        widgets::track_row(
+        let picked = widgets::track_row(
             ui,
             app,
             TrackRow {
@@ -377,10 +391,19 @@ fn songs(app: &mut App, ui: &mut egui::Ui, results: &SearchResults, limit: usize
                 compact: limit != usize::MAX,
                 thin: false,
                 shift: 0.0,
-                picked: false,
+                picked: navigation.picked(index),
                 picked_songs: &[],
             },
         );
+        if picked.is_some() {
+            super::navigation::pick(
+                app,
+                super::navigation::Pane::Main,
+                owner,
+                index,
+                egui::Id::new(item.uri()),
+            );
+        }
     }
 }
 

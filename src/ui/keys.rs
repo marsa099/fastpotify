@@ -17,6 +17,17 @@ pub(super) const MILKDROP_SHORTCUT: &str = platform_shortcut("Ctrl+Shift+K", "Cm
 pub fn handle(app: &mut App, ctx: &egui::Context) {
     let typing = ctx.memory(|memory| memory.focused().is_some());
     let mut actions = Vec::new();
+    let vim = app.settings.vim_keys;
+    let blocked =
+        typing || app.dialog.is_some() || app.show_devices || egui::Popup::is_any_open(ctx);
+    if vim && !blocked {
+        let (commands, prefix) =
+            ctx.input_mut(|input| vim_commands(&mut input.events, input.time, app.navigation.g_at));
+        actions.extend(commands.into_iter().map(Action::Navigate));
+        actions.push(Action::VimPrefix(prefix));
+    } else if app.navigation.g_at.is_some() {
+        actions.push(Action::VimPrefix(None));
+    }
     ctx.input_mut(|input| {
         let mut key = |modifiers: Modifiers, key: Key, action: Action| {
             if input.consume_key(modifiers, key) {
@@ -108,7 +119,15 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
             key(Modifiers::NONE, Key::S, Action::ToggleShuffle);
             key(Modifiers::NONE, Key::R, Action::CycleRepeat);
             key(Modifiers::NONE, Key::Q, Action::ToggleQueuePanel);
-            key(Modifiers::NONE, Key::L, Action::ToggleLyricsPanel);
+            key(
+                if vim {
+                    Modifiers::SHIFT
+                } else {
+                    Modifiers::NONE
+                },
+                Key::L,
+                Action::ToggleLyricsPanel,
+            );
             key(Modifiers::NONE, Key::Slash, Action::FocusSearch);
         }
     });
@@ -163,6 +182,70 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
     }
 }
 
+/// Consume exact modifiers so Shift+G cannot become the first half of gg,
+/// and command shortcuts never become bare navigation keys.
+fn vim_commands(
+    events: &mut Vec<egui::Event>,
+    now: f64,
+    prefix: Option<f64>,
+) -> (Vec<super::navigation::Command>, Option<f64>) {
+    use super::navigation::Command;
+    let mut prefix = prefix.filter(|at| now - at <= 0.75);
+    let mut commands = Vec::new();
+    events.retain(|event| {
+        let egui::Event::Key {
+            key,
+            pressed: true,
+            repeat,
+            modifiers,
+            ..
+        } = event
+        else {
+            return true;
+        };
+        if *modifiers == Modifiers::NONE && *key == Key::G {
+            if !repeat {
+                if prefix.take().is_some() {
+                    commands.push(Command::First);
+                } else {
+                    prefix = Some(now);
+                }
+            }
+            return false;
+        }
+        prefix = None;
+        let command = if *modifiers == Modifiers::NONE {
+            match key {
+                Key::H => Some(Command::Left),
+                Key::L => Some(Command::Right),
+                Key::J => Some(Command::Down),
+                Key::K => Some(Command::Up),
+                Key::Enter => Some(Command::Play),
+                Key::O => Some(Command::Open),
+                Key::Escape => Some(Command::Clear),
+                _ => None,
+            }
+        } else if *modifiers == Modifiers::SHIFT && *key == Key::G {
+            Some(Command::Last)
+        } else if modifiers.ctrl && !modifiers.alt && !modifiers.shift && !modifiers.mac_cmd {
+            match key {
+                Key::D => Some(Command::HalfDown),
+                Key::U => Some(Command::HalfUp),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let Some(command) = command {
+            commands.push(command);
+            false
+        } else {
+            true
+        }
+    });
+    (commands, prefix)
+}
+
 pub const SHORTCUTS: &[(&str, &str)] = &[
     ("Space", "Play or pause"),
     (
@@ -179,7 +262,16 @@ pub const SHORTCUTS: &[(&str, &str)] = &[
     ("S", "Toggle shuffle"),
     ("R", "Cycle repeat"),
     ("Q", "Show the queue"),
-    ("L", "Show the lyrics"),
+    ("L (Shift+L with Vim keys)", "Show the lyrics"),
+    ("h / l", "Vim keys: focus left / right pane"),
+    ("j / k", "Vim keys: select next / previous row"),
+    (
+        "gg / Shift+G",
+        "Vim keys: first / last row (loads remaining pages)",
+    ),
+    ("Control+d / Control+u", "Vim keys: half-page down / up"),
+    ("Enter / o", "Vim keys: play or open / open album"),
+    ("Esc", "Vim keys: clear selection"),
     (platform_shortcut("Ctrl+F  or  /", "Cmd+F  or  /"), "Search"),
     (SIDEBAR_SHORTCUT, "Show or hide the sidebar"),
     ("Alt+←  /  Alt+→", "Back or forward"),
@@ -215,6 +307,70 @@ mod tests {
     use crate::app::AppOptions;
     use crate::paths::AppDirs;
     use crate::settings::Settings;
+
+    fn event(key: Key, modifiers: Modifiers, repeat: bool) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat,
+            modifiers,
+        }
+    }
+
+    #[test]
+    fn vim_prefix_requires_two_presses_and_expires() {
+        use super::super::navigation::Command;
+        let (_, prefix) = vim_commands(&mut vec![event(Key::G, Modifiers::NONE, false)], 1.0, None);
+        assert_eq!(prefix, Some(1.0));
+        let (commands, _) =
+            vim_commands(&mut vec![event(Key::G, Modifiers::NONE, true)], 1.1, prefix);
+        assert!(commands.is_empty());
+        let (commands, prefix) = vim_commands(
+            &mut vec![event(Key::G, Modifiers::NONE, false)],
+            1.2,
+            prefix,
+        );
+        assert_eq!(commands, vec![Command::First]);
+        assert_eq!(prefix, None);
+        let (commands, prefix) = vim_commands(
+            &mut vec![event(Key::G, Modifiers::NONE, false)],
+            3.0,
+            Some(1.0),
+        );
+        assert!(commands.is_empty());
+        assert_eq!(prefix, Some(3.0));
+        let (commands, prefix) = vim_commands(
+            &mut vec![
+                event(Key::J, Modifiers::NONE, false),
+                event(Key::G, Modifiers::NONE, false),
+            ],
+            3.1,
+            prefix,
+        );
+        assert_eq!(commands, vec![Command::Down]);
+        assert_eq!(prefix, Some(3.1));
+    }
+
+    #[test]
+    fn vim_modifiers_are_exact_and_unrelated_shortcuts_survive() {
+        use super::super::navigation::Command;
+        let mut events = vec![
+            event(Key::G, Modifiers::SHIFT, false),
+            event(Key::D, Modifiers::CTRL, false),
+            event(Key::U, Modifiers::CTRL, false),
+            event(Key::L, Modifiers::SHIFT, false),
+            event(Key::L, Modifiers::COMMAND, false),
+            event(Key::K, Modifiers::ALT, false),
+        ];
+        let (commands, prefix) = vim_commands(&mut events, 0.0, Some(0.0));
+        assert_eq!(
+            commands,
+            vec![Command::Last, Command::HalfDown, Command::HalfUp]
+        );
+        assert_eq!(events.len(), 3);
+        assert_eq!(prefix, None);
+    }
 
     #[test]
     fn shortcut_constants_name_the_platform_modifier() {

@@ -706,6 +706,28 @@ pub struct Toast {
 /// Actions emitted while drawing and applied afterward to avoid borrow conflicts.
 #[derive(Clone, Debug)]
 pub enum Action {
+    Navigate(crate::ui::navigation::Command),
+    NavigationFocus(crate::ui::navigation::Pane),
+    NavigationCursor {
+        pane: crate::ui::navigation::Pane,
+        cursor: crate::ui::navigation::Cursor,
+    },
+    VimPrefix(Option<f64>),
+    PickTableRow {
+        page: Page,
+        view: String,
+        row: usize,
+        pick: RowPick,
+        len: usize,
+        owner: egui::Id,
+        key: egui::Id,
+    },
+    KeyboardPick {
+        page: Page,
+        view: String,
+        row: Option<usize>,
+    },
+    ToggleLibraryFolder(String),
     Open(Page),
     OpenUri(String),
     /// A Spotify link from outside the app: its page opens and the window

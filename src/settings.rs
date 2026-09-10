@@ -118,6 +118,8 @@ pub struct Settings {
     pub tracklist_compact: bool,
     pub search_history: Vec<String>,
     pub show_shortcut_hints: bool,
+    /// Non-modal Vim navigation in the library, track lists, and queue.
+    pub vim_keys: bool,
     /// An optional personal Spotify Web API application id. The shared
     /// application remains active for coverage when this is present.
     pub web_client_id: Option<String>,
@@ -221,6 +223,7 @@ impl Default for Settings {
             tracklist_compact: false,
             search_history: Vec::new(),
             show_shortcut_hints: true,
+            vim_keys: false,
             web_client_id: None,
             personal_app_nudge_at: None,
             personal_app_intro_seen: false,
@@ -327,6 +330,16 @@ impl Settings {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn vim_keys_are_opt_in_and_round_trip() {
+        let mut settings: super::Settings = serde_json::from_str("{}").unwrap();
+        assert!(!settings.vim_keys);
+        settings.vim_keys = true;
+        let encoded = serde_json::to_string(&settings).unwrap();
+        let restored: super::Settings = serde_json::from_str(&encoded).unwrap();
+        assert!(restored.vim_keys);
+    }
+
     use super::Settings;
 
     #[test]

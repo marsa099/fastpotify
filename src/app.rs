@@ -394,6 +394,7 @@ pub struct App {
     /// The page it belongs to, what that page's list looked like when the
     /// rows were picked, and the rows.
     pub selection: Option<(Page, String, RowSelection)>,
+    pub navigation: crate::ui::navigation::Navigation,
     pub table_sorts: HashMap<Page, TableSort>,
     /// User ids resolved to display names; `None` while unknown, so an id
     /// is asked about only once per run.
@@ -655,6 +656,7 @@ impl App {
             glide: None,
             scroll_last_event: None,
             selection: None,
+            navigation: Default::default(),
             table_sorts: session
                 .sorts
                 .iter()
@@ -5750,6 +5752,73 @@ impl App {
 
     pub(crate) fn apply(&mut self, action: Action, ctx: &egui::Context) {
         match action {
+            Action::Navigate(command) => {
+                use crate::ui::navigation::Command;
+                if matches!(command, Command::Left | Command::Right) {
+                    let previous = self
+                        .navigation
+                        .active_pane(self.settings.sidebar_visible, self.show_queue_panel);
+                    self.navigation.cursors[previous as usize].end = false;
+                    self.navigation.cursors[previous as usize].start = false;
+                    self.navigation.pane = self.navigation.pane.adjacent(
+                        command == Command::Right,
+                        self.settings.sidebar_visible,
+                        self.show_queue_panel,
+                    );
+                    ctx.request_repaint();
+                }
+            }
+            Action::NavigationFocus(pane) => self.navigation.pane = pane,
+            Action::NavigationCursor { pane, cursor } => {
+                self.navigation.cursors[pane as usize] = cursor;
+                ctx.request_repaint();
+            }
+            Action::VimPrefix(at) => self.navigation.g_at = at,
+            Action::PickTableRow {
+                page,
+                view,
+                row,
+                pick,
+                len,
+                owner,
+                key,
+            } => {
+                self.pick_row(&page, &view, row, pick, len);
+                if self.settings.vim_keys {
+                    use crate::ui::navigation::{Cursor, Pane};
+                    let selected = self
+                        .picked_rows(&page)
+                        .is_some_and(|rows| rows.contains(&row));
+                    self.navigation.pane = Pane::Main;
+                    self.navigation.cursors[Pane::Main as usize] = Cursor {
+                        owner: Some(owner),
+                        row: selected.then_some(row),
+                        key: selected.then_some(key),
+                        end: false,
+                        start: false,
+                    };
+                }
+            }
+            Action::KeyboardPick { page, view, row } => {
+                self.selection = row.map(|row| {
+                    (
+                        page,
+                        view,
+                        RowSelection {
+                            anchor: Some(row),
+                            rows: std::collections::BTreeSet::from([row]),
+                        },
+                    )
+                });
+            }
+            Action::ToggleLibraryFolder(id) => {
+                if self.collapsed_folders.contains(&id) {
+                    self.collapsed_folders.retain(|held| *held != id);
+                } else {
+                    self.collapsed_folders.push(id);
+                }
+                self.session_dirty = true;
+            }
             Action::Open(page) => self.open(page),
             Action::OpenUri(uri) => {
                 if let Some(page) = Page::from_uri(&uri) {
