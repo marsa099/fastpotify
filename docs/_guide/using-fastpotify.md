@@ -74,14 +74,18 @@ use Control on macOS too, not Command.
 In card grids and shelves, `h/j/k/l` move left/down/up/right. `l` never opens
 a card: use `o` or `Enter` to open it and focus the content pane. Cards outside
 the viewport scroll into view, including virtualized library grids and cards
-inside horizontal shelves. On Home, `h` at the leftmost card moves focus to
-the sidebar if it is visible. `gg/G`
-select the first/last loaded item. On Search and artist pages, `j` below the
-last track enters the cards, and `k` above the first card returns to tracks.
+inside horizontal shelves. On Home and Search, `h` at the leftmost target moves
+focus to the sidebar if it is visible. `gg/G` select the first/last loaded item.
+Submitting Search with Enter focuses its results, even if the sidebar or queue
+was active before typing. Search's All view connects the large Top result,
+Songs, and shelves with spatial `h/j/k/l` movement; Enter plays a selected song
+and `o` opens its album. The Songs filter retains normal list navigation.
+On artist pages, `j` below Popular enters the cards, and `k` above them returns
+to tracks.
 Home follows display order in both directions: `j` moves from Your top artists
 into Your top songs and then recommendations; `k` moves back up. Enter plays
 the selected Home song and `o` opens its album.
-In track lists, bare `h/l` retain their pane-switching behavior. In the left
+In other track lists, bare `h/l` retain their pane-switching behavior. In the left
 sidebar, `l` opens the selected playlist or other entry and focuses its
 content. A selected folder toggles without moving focus. With no selection,
 `l` does nothing. `Ctrl+l` switches panes without opening the selected entry.

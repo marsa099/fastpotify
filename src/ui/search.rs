@@ -328,6 +328,12 @@ fn top_result(
             }
         }
     }
+    let key = format!(
+        "search-top:{}:{}",
+        app.search.committed,
+        play_uri.as_deref().unwrap_or(title)
+    );
+    super::grid_navigation::card_key(app, ui, &response, page.clone(), &key);
     let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
     if response.clicked() && page != Page::Search {
         app.actions.push(Action::Open(page));
@@ -366,36 +372,65 @@ fn songs(app: &mut App, ui: &mut egui::Ui, results: &SearchResults, limit: usize
     } else {
         theme::COMPACT_ROW_HEIGHT
     };
-    let navigation = super::navigation::playable_view(
-        app,
-        ui,
-        owner,
-        &items[..items.len().min(limit)],
-        &context,
-        row_height + ui.spacing().item_spacing.y,
-    );
-    for (index, item) in items.iter().take(limit).enumerate() {
-        let picked = widgets::track_row(
-            ui,
+    let spatial = app.settings.vim_keys && app.search.filter == SearchFilter::All;
+    let navigation = (!spatial).then(|| {
+        super::navigation::playable_view(
             app,
-            TrackRow {
-                index,
-                number: None,
-                item,
-                context: &context,
-                show_cover: true,
-                show_album: limit == usize::MAX,
-                added_at: None,
-                added_by: None,
-                show_added_by: false,
-                compact: limit != usize::MAX,
-                thin: false,
-                shift: 0.0,
-                picked: navigation.picked(index),
-                picked_songs: &[],
-            },
-        );
-        if picked.is_some() {
+            ui,
+            owner,
+            &items[..items.len().min(limit)],
+            &context,
+            row_height + ui.spacing().item_spacing.y,
+        )
+    });
+    for (index, item) in items.iter().take(limit).enumerate() {
+        let id = egui::Id::new(("search-track", &app.search.committed, index, item.uri()));
+        let picked = navigation.as_ref().is_some_and(|nav| nav.picked(index))
+            || (spatial
+                && app.grid_navigation.active_on(app.page())
+                && app
+                    .navigation
+                    .active_pane(app.settings.sidebar_visible, app.show_queue_panel)
+                    == super::navigation::Pane::Main
+                && app.grid_navigation.selected == Some(id));
+        let draw = |ui: &mut egui::Ui, app: &mut App| {
+            widgets::track_row(
+                ui,
+                app,
+                TrackRow {
+                    index,
+                    number: None,
+                    item,
+                    context: &context,
+                    show_cover: true,
+                    show_album: limit == usize::MAX,
+                    added_at: None,
+                    added_by: None,
+                    show_added_by: false,
+                    compact: limit != usize::MAX,
+                    thin: false,
+                    shift: 0.0,
+                    picked,
+                    picked_songs: &[],
+                },
+            )
+        };
+        if spatial {
+            let row = ui.push_id(id, |ui| draw(ui, app));
+            if row.inner.is_some() {
+                app.actions.push(Action::FocusGridCard(id));
+            }
+            super::grid_navigation::track(
+                app,
+                &row.response,
+                id,
+                super::grid_navigation::TrackTarget {
+                    item: item.clone(),
+                    context: context.clone(),
+                    index,
+                },
+            );
+        } else if draw(ui, app).is_some() {
             super::navigation::pick(
                 app,
                 super::navigation::Pane::Main,

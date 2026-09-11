@@ -292,8 +292,10 @@ Home (including shelves), library grids, search-result grids, and artist pages.
 `l` moves right in a grid, never opens a card. `o` or `Enter` opens it with
 focus in the content pane. In the left sidebar, `l` opens the selected playlist
 (or other entry) and focuses its content. With no selection, `l` does nothing;
-`Ctrl+l` always remains a pane-only switch. On Search and artist pages, `j`
-below the last track enters the cards; `k` above the first card returns to tracks.
+`Ctrl+l` always remains a pane-only switch. Submitting Search with Enter focuses
+its results. In Search's All view, `h/j/k/l` connects the large Top result,
+Songs, and the shelves spatially. Song Enter plays; `o` opens its album.
+On artist pages, `j` below Popular enters the cards; `k` above them returns to tracks.
 On Home, `j/k` follows the displayed order through shelves, Your top artists,
 Your top songs, and recommendations. Enter plays a Home song; `o` opens its album.
 

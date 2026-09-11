@@ -5798,6 +5798,19 @@ impl App {
                 self.selection = None;
                 ctx.request_repaint();
             }
+            Action::FocusGridCard(id) => {
+                if self.settings.vim_keys
+                    && self.grid_navigation.page.as_ref() == Some(self.page())
+                    && self.grid_navigation.cards.iter().any(|card| card.id == id)
+                {
+                    self.navigation.pane = crate::ui::navigation::Pane::Main;
+                    self.grid_navigation.active = true;
+                    self.grid_navigation.selected = Some(id);
+                    self.grid_navigation.scroll = None;
+                    self.selection = None;
+                    ctx.request_repaint();
+                }
+            }
             Action::NavigationFocus(pane) => {
                 self.navigation.pane = pane;
                 if pane == crate::ui::navigation::Pane::Main {
@@ -6243,6 +6256,13 @@ impl App {
                 }
             }
             Action::Search(query) => {
+                if self.settings.vim_keys {
+                    use crate::ui::navigation::{Cursor, Pane};
+                    self.navigation.pane = Pane::Main;
+                    self.navigation.cursors[Pane::Main as usize] = Cursor::default();
+                    self.grid_navigation = Default::default();
+                    ctx.request_repaint();
+                }
                 self.search.query = query.clone();
                 self.search.typed_at = None;
                 self.open(Page::Search);

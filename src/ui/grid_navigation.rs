@@ -271,15 +271,15 @@ fn register(app: &mut App, ui: &mut egui::Ui, response: &egui::Response, page: P
     }
 }
 
-/// Home interleaves shelves and track sections. Publish rows in the same
-/// geometry stream so vertical movement follows the actual display order.
+/// Mixed pages interleave cards and track sections. Publish rows in the same
+/// geometry stream so movement follows the actual display order.
 pub fn track(app: &mut App, response: &egui::Response, id: Id, target: TrackTarget) {
     if !app.settings.vim_keys {
         return;
     }
     app.actions.push(Action::GridCard(Card {
         id,
-        page: Page::Home,
+        page: app.page().clone(),
         rect: response.rect,
         response: Some(response.id),
         row: Some(Box::new(target)),

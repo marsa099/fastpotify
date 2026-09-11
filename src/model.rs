@@ -713,6 +713,7 @@ pub enum Action {
     GridCard(crate::ui::grid_navigation::Card),
     GridScrolled(egui::Id),
     FocusGrid,
+    FocusGridCard(egui::Id),
     NavigationFocus(crate::ui::navigation::Pane),
     NavigationCursor {
         pane: crate::ui::navigation::Pane,

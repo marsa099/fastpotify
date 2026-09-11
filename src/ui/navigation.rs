@@ -136,13 +136,14 @@ pub fn pane_move(app: &App, command: Command, pane: Pane) -> Option<bool> {
         Command::Left | Command::Right
             if pane == Pane::Main
                 && app.grid_navigation.active_on(app.page())
+                && app.page() == &Page::Home
                 && app.grid_navigation.selected_row().is_some() =>
         {
             Some(command == Command::Right)
         }
         Command::Left
             if pane == Pane::Main
-                && app.page() == &Page::Home
+                && matches!(app.page(), Page::Home | Page::Search)
                 && app.settings.sidebar_visible
                 && app.grid_navigation.active_on(app.page())
                 && app.grid_navigation.at_left_edge() =>
@@ -430,12 +431,18 @@ mod tests {
     }
 
     fn frame(app: &mut App, ctx: &egui::Context, events: Vec<egui::Event>) -> Vec<Action> {
+        frame_at_size(app, ctx, events, egui::vec2(1200.0, 800.0))
+    }
+
+    fn frame_at_size(
+        app: &mut App,
+        ctx: &egui::Context,
+        events: Vec<egui::Event>,
+        size: egui::Vec2,
+    ) -> Vec<Action> {
         let mut output = ctx.run_ui(
             egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    egui::vec2(1200.0, 800.0),
-                )),
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
                 events,
                 ..Default::default()
             },
@@ -604,6 +611,7 @@ mod tests {
     #[test]
     fn vim_search_and_artist_tracks_play_and_open_the_selected_album() {
         with_app(|app, ctx| {
+            app.search.filter = crate::model::SearchFilter::Songs;
             for page in [Page::Search, Page::Artist("art0".into())] {
                 app.open(page);
                 frame(app, ctx, vec![]);
@@ -622,6 +630,230 @@ mod tests {
                         .any(|action| matches!(action, Action::Open(Page::Album(_))))
                 );
             }
+        });
+    }
+
+    #[test]
+    fn search_enter_focuses_results_from_sidebar_or_queue_only_in_vim_mode() {
+        for vim in [true, false] {
+            for pane in [Pane::Sidebar, Pane::Queue] {
+                with_app(|app, ctx| {
+                    app.settings.vim_keys = vim;
+                    app.show_queue_panel = true;
+                    app.navigation.pane = pane;
+                    app.apply(Action::FocusSearch, ctx);
+                    frame(app, ctx, vec![]);
+                    frame(app, ctx, vec![]);
+                    assert!(ctx.egui_wants_keyboard_input());
+                    let actions = press(app, ctx, egui::Key::Enter, egui::Modifiers::NONE);
+                    assert!(
+                        actions
+                            .iter()
+                            .any(|action| matches!(action, Action::Search(_)))
+                    );
+                    assert_eq!(app.navigation.pane, if vim { Pane::Main } else { pane });
+                    assert!(!ctx.egui_wants_keyboard_input());
+                    if vim {
+                        frame(app, ctx, vec![]);
+                        press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+                        assert_eq!(
+                            app.grid_navigation.selected,
+                            Some(app.grid_navigation.cards[0].id)
+                        );
+                    }
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn search_all_connects_top_result_songs_and_shelves_at_both_widths() {
+        for width in [760.0, 1280.0] {
+            with_app(|app, ctx| {
+                let size = egui::vec2(width, 900.0);
+                let key = |app: &mut App, key| {
+                    frame_at_size(
+                        app,
+                        ctx,
+                        vec![egui::Event::Key {
+                            key,
+                            physical_key: None,
+                            pressed: true,
+                            repeat: false,
+                            modifiers: egui::Modifiers::NONE,
+                        }],
+                        size,
+                    )
+                };
+                app.open(Page::Search);
+                for _ in 0..2 {
+                    frame_at_size(app, ctx, vec![], size);
+                }
+                assert!(app.grid_navigation.active_on(&Page::Search));
+                assert!(!app.grid_navigation.has_rows);
+                let top = app.grid_navigation.cards[0].clone();
+                assert_eq!(top.rect.height(), 232.0);
+                assert!(top.row.is_none());
+                key(app, egui::Key::J);
+                assert_eq!(app.grid_navigation.selected, Some(top.id));
+                key(
+                    app,
+                    if width > 1000.0 {
+                        egui::Key::L
+                    } else {
+                        egui::Key::J
+                    },
+                );
+                let row = app
+                    .grid_navigation
+                    .selected_row()
+                    .expect("top result must connect to Songs")
+                    .clone();
+                assert!(
+                    matches!(app.grid_navigation.navigate(Command::Play), Some(Action::PlayFromRow { uri, index, .. }) if uri == row.item.uri() && index == row.index as u32)
+                );
+                assert!(matches!(
+                    app.grid_navigation.navigate(Command::Open),
+                    Some(Action::Open(Page::Album(_)))
+                ));
+                key(
+                    app,
+                    if width > 1000.0 {
+                        egui::Key::H
+                    } else {
+                        egui::Key::K
+                    },
+                );
+                assert_eq!(app.navigation.pane, Pane::Main);
+                assert_eq!(app.grid_navigation.selected, Some(top.id));
+                let shelf = app
+                    .grid_navigation
+                    .cards
+                    .iter()
+                    .find(|card| card.row.is_none() && card.rect.top() > top.rect.bottom())
+                    .unwrap()
+                    .id;
+                app.grid_navigation.selected = Some(shelf);
+                key(app, egui::Key::K);
+                if width <= 1000.0 {
+                    for _ in 0..4 {
+                        key(app, egui::Key::K);
+                    }
+                }
+                assert_eq!(app.grid_navigation.selected, Some(top.id));
+                assert!(
+                    matches!(app.grid_navigation.navigate(Command::Open), Some(Action::Open(page)) if page == top.page)
+                );
+                key(app, egui::Key::H);
+                assert_eq!(app.navigation.pane, Pane::Sidebar);
+            });
+        }
+    }
+
+    #[test]
+    fn search_top_result_opens_artist_song_album_playlist_and_show_targets() {
+        for kind in 0..5 {
+            with_app(|app, ctx| {
+                let mut results = app.search.results.get().unwrap().clone();
+                let destination = match kind {
+                    0 => {
+                        let artist = &results.artists.as_ref().unwrap().items[0];
+                        app.search.committed = artist.name.clone();
+                        Page::Artist(artist.id.clone())
+                    }
+                    1 => Page::Album(
+                        results.tracks.as_ref().unwrap().items[0]
+                            .album
+                            .as_ref()
+                            .unwrap()
+                            .id
+                            .clone(),
+                    ),
+                    2 => Page::Album(results.albums.as_ref().unwrap().items[0].id.clone()),
+                    3 => Page::Playlist(results.playlists.as_ref().unwrap().items[0].id.clone()),
+                    _ => Page::Show(results.shows.as_ref().unwrap().items[0].id.clone()),
+                };
+                if kind >= 1 {
+                    results.artists = None;
+                }
+                if kind >= 2 {
+                    results.tracks = None;
+                }
+                if kind >= 3 {
+                    results.albums = None;
+                }
+                if kind >= 4 {
+                    results.playlists = None;
+                }
+                app.search.results = crate::model::Loadable::Loaded(results);
+                app.open(Page::Search);
+                frame(app, ctx, vec![]);
+                press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+                assert_eq!(app.grid_navigation.cards[0].rect.height(), 232.0);
+                press(app, ctx, egui::Key::Enter, egui::Modifiers::NONE);
+                assert_eq!(app.page(), &destination);
+            });
+        }
+    }
+
+    #[test]
+    fn search_song_mouse_selection_remains_usable_with_spatial_keys() {
+        with_app(|app, ctx| {
+            app.open(Page::Search);
+            frame(app, ctx, vec![]);
+            frame(app, ctx, vec![]);
+            app.navigation.pane = Pane::Sidebar;
+            let row = app
+                .grid_navigation
+                .cards
+                .iter()
+                .find(|card| card.row.as_ref().is_some_and(|row| row.index == 1))
+                .unwrap()
+                .clone();
+            let pos = row.rect.center();
+            for pressed in [true, false] {
+                let actions = frame(
+                    app,
+                    ctx,
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+                assert!(
+                    !actions
+                        .iter()
+                        .any(|action| matches!(action, Action::PlayFromRow { .. }))
+                );
+            }
+            assert_eq!(app.navigation.pane, Pane::Main);
+            assert_eq!(app.grid_navigation.selected, Some(row.id));
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            assert_eq!(app.grid_navigation.selected_row().unwrap().index, 2);
+            app.apply(
+                Action::FocusGridCard(egui::Id::new("missing search row")),
+                ctx,
+            );
+            assert_eq!(app.grid_navigation.selected_row().unwrap().index, 2);
+        });
+    }
+
+    #[test]
+    fn search_top_result_targets_follow_the_result_identity() {
+        with_app(|app, ctx| {
+            app.open(Page::Search);
+            frame(app, ctx, vec![]);
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            assert!(app.grid_navigation.selected.is_some());
+            app.search.committed.push_str(" changed");
+            frame(app, ctx, vec![]);
+            assert!(app.grid_navigation.selected.is_none());
+            assert!(app.grid_navigation.navigate(Command::Open).is_none());
         });
     }
 
