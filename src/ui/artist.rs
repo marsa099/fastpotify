@@ -223,6 +223,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, id: &str) {
                                 false,
                                 true,
                             );
+                            super::grid_navigation::card(
+                                app,
+                                ui,
+                                &card.response,
+                                Page::Album(album.id.clone()),
+                            );
                             if card.play {
                                 app.actions.push(Action::PlayContext {
                                     uri: album.uri.clone(),
@@ -281,6 +287,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, id: &str) {
                             "Artist",
                             true,
                             true,
+                        );
+                        super::grid_navigation::card(
+                            app,
+                            ui,
+                            &card.response,
+                            Page::Artist(artist.id.clone()),
                         );
                         if card.play {
                             app.actions.push(Action::PlayContext {

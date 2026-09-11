@@ -57,21 +57,31 @@ Turn on **Settings → Keyboard → Vim keys** for non-modal list navigation.
 The setting defaults to off and does not change existing shortcuts until enabled.
 Text fields, focused controls, menus, and dialogs keep their normal keyboard input.
 
-Use `h` and `l` to focus the visible library, main list, or queue pane. Its
-outline marks the active pane. `j` and `k` select rows in display order and
-scroll them into view. `gg` selects the first row; `G` (`Shift+g`) selects the
+Use `Ctrl+h` and `Ctrl+l` to focus the visible library, main content, or queue
+pane. A rounded, two-point gray outline marks the active pane. These shortcuts
+leave input fields alone, including search and filters. In Vim mode they
+replace Home/Liked Songs on Linux and Windows; macOS Command shortcuts are
+unchanged. `j` and `k` select list rows in display order and scroll them into view. `gg` selects the first row; `G` (`Shift+g`) selects the
 last. The two `g` presses must be within 750 ms, without another key between.
 `Ctrl+d` and `Ctrl+u` move half the visible pane height. These two shortcuts
 use Control on macOS too, not Command.
 
-`Enter` plays the selected song. In the library it opens the selected entry
+In card grids and shelves, `h/j/k/l` move left/down/up/right. `l` never opens
+a card: use `o` or `Enter` to open it and focus the content pane. Cards outside
+the viewport scroll into view, including virtualized library grids. `gg/G`
+select the first/last loaded card. On pages mixing tracks and cards, `j` below
+the last track enters the cards, and `k` above the first card returns to tracks.
+In lists, bare `h/l` retain their pane-switching behavior.
+
+`Enter` plays the selected song in a track list. In the library it opens the selected entry
 or expands/collapses a folder. `o` opens a song's album, an episode's show,
 or the selected library entry. `Esc` clears selection. Bare `l` now moves
 right, so **Shift+L** opens lyrics instead. `/` still focuses search.
 
 Navigation covers collection tables, search-result songs, artist Popular
-tracks, library rows, and the queue and Recent panel. Card grids are not yet
-covered. Search and Popular preview sections navigate only the rows shown.
+tracks, library rows, the queue and Recent panel, and Home, library, search,
+and artist card grids and shelves. Search and Popular preview sections
+navigate only the rows shown.
 On a partially loaded list, `G` requests remaining pages through the normal
 loader and follows the end as they arrive. Another navigation key cancels
 the end jump; loading errors stop it. Playing a queue selection skips to that

@@ -395,6 +395,7 @@ pub struct App {
     /// rows were picked, and the rows.
     pub selection: Option<(Page, String, RowSelection)>,
     pub navigation: crate::ui::navigation::Navigation,
+    pub grid_navigation: crate::ui::grid_navigation::GridNavigation,
     pub table_sorts: HashMap<Page, TableSort>,
     /// User ids resolved to display names; `None` while unknown, so an id
     /// is asked about only once per run.
@@ -657,6 +658,7 @@ impl App {
             scroll_last_event: None,
             selection: None,
             navigation: Default::default(),
+            grid_navigation: Default::default(),
             table_sorts: session
                 .sorts
                 .iter()
@@ -1484,6 +1486,7 @@ impl App {
         self.search.results = Loadable::NotLoaded;
         self.search.committed.clear();
         self.table_rows.clear();
+        self.grid_navigation = Default::default();
         self.page_used.clear();
         self.track_used.clear();
     }
@@ -5743,6 +5746,7 @@ impl App {
         self.frame_now = None;
         let mut actions = std::mem::take(&mut self.actions);
         while !actions.is_empty() {
+            self.grid_navigation.prepare(&actions);
             for action in actions.drain(..) {
                 self.apply(action, ctx);
             }
@@ -5753,22 +5757,47 @@ impl App {
     pub(crate) fn apply(&mut self, action: Action, ctx: &egui::Context) {
         match action {
             Action::Navigate(command) => {
-                use crate::ui::navigation::Command;
-                if matches!(command, Command::Left | Command::Right) {
-                    let previous = self
-                        .navigation
-                        .active_pane(self.settings.sidebar_visible, self.show_queue_panel);
+                use crate::ui::navigation::Pane;
+                let previous = self
+                    .navigation
+                    .active_pane(self.settings.sidebar_visible, self.show_queue_panel);
+                if let Some(right) = crate::ui::navigation::pane_move(self, command, previous) {
                     self.navigation.cursors[previous as usize].end = false;
                     self.navigation.cursors[previous as usize].start = false;
                     self.navigation.pane = self.navigation.pane.adjacent(
-                        command == Command::Right,
+                        right,
                         self.settings.sidebar_visible,
                         self.show_queue_panel,
                     );
                     ctx.request_repaint();
+                } else if previous == Pane::Main && self.grid_navigation.active_on(self.page()) {
+                    if let Some(page) = self.grid_navigation.navigate(command) {
+                        self.navigation.pane = Pane::Main;
+                        self.open(page);
+                    }
+                    ctx.request_repaint();
                 }
             }
-            Action::NavigationFocus(pane) => self.navigation.pane = pane,
+            Action::GridFrame(_)
+            | Action::GridViewport(_)
+            | Action::GridRows
+            | Action::GridCard(_) => {}
+            Action::GridScrolled(id) => {
+                if self.grid_navigation.scroll == Some(id) {
+                    self.grid_navigation.scroll = None;
+                }
+            }
+            Action::FocusGrid => {
+                self.grid_navigation.focus();
+                self.selection = None;
+                ctx.request_repaint();
+            }
+            Action::NavigationFocus(pane) => {
+                self.navigation.pane = pane;
+                if pane == crate::ui::navigation::Pane::Main {
+                    self.grid_navigation.active = false;
+                }
+            }
             Action::NavigationCursor { pane, cursor } => {
                 self.navigation.cursors[pane as usize] = cursor;
                 ctx.request_repaint();
@@ -5790,6 +5819,7 @@ impl App {
                         .picked_rows(&page)
                         .is_some_and(|rows| rows.contains(&row));
                     self.navigation.pane = Pane::Main;
+                    self.grid_navigation.active = false;
                     self.navigation.cursors[Pane::Main as usize] = Cursor {
                         owner: Some(owner),
                         row: selected.then_some(row),

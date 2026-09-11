@@ -34,6 +34,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, page: Page) {
         Page::Albums => {
             let card_height = widgets::card_row_height(ui);
             let count = app.library.albums.items.len();
+            if app.settings.vim_keys {
+                let pages: Vec<_> = app
+                    .library
+                    .albums
+                    .items
+                    .iter()
+                    .map(|saved| Page::Album(saved.album.id.clone()))
+                    .collect();
+                super::grid_navigation::virtual_cards(app, ui, &pages, card_height);
+            }
             widgets::virtual_wrapped_cards(ui, count, card_height, |ui, index| {
                 let album = app.library.albums.items[index].album.clone();
                 let id = album.id.clone();
@@ -55,6 +65,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, page: Page) {
                         offset_index: None,
                     });
                 }
+                super::grid_navigation::virtual_card(
+                    app,
+                    ui,
+                    &card.response,
+                    Page::Album(id.clone()),
+                );
                 if card.clicked {
                     app.actions.push(Action::Open(Page::Album(id)));
                 }
@@ -86,6 +102,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, page: Page) {
         Page::Artists => {
             let card_height = widgets::card_row_height(ui);
             let count = app.library.artists.items.len();
+            if app.settings.vim_keys {
+                let pages: Vec<_> = app
+                    .library
+                    .artists
+                    .items
+                    .iter()
+                    .map(|artist| Page::Artist(artist.id.clone()))
+                    .collect();
+                super::grid_navigation::virtual_cards(app, ui, &pages, card_height);
+            }
             widgets::virtual_wrapped_cards(ui, count, card_height, |ui, index| {
                 let artist = app.library.artists.items[index].clone();
                 let id = artist.id.clone();
@@ -106,6 +132,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, page: Page) {
                         offset_index: None,
                     });
                 }
+                super::grid_navigation::virtual_card(
+                    app,
+                    ui,
+                    &card.response,
+                    Page::Artist(id.clone()),
+                );
                 if card.clicked {
                     app.actions.push(Action::Open(Page::Artist(id)));
                 }
@@ -139,6 +171,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, page: Page) {
         Page::Podcasts => {
             let card_height = widgets::card_row_height(ui);
             let count = app.library.shows.items.len();
+            if app.settings.vim_keys {
+                let pages: Vec<_> = app
+                    .library
+                    .shows
+                    .items
+                    .iter()
+                    .map(|saved| Page::Show(saved.show.id.clone()))
+                    .collect();
+                super::grid_navigation::virtual_cards(app, ui, &pages, card_height);
+            }
             widgets::virtual_wrapped_cards(ui, count, card_height, |ui, index| {
                 let show = app.library.shows.items[index].show.clone();
                 let id = show.id.clone();
@@ -150,6 +192,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, page: Page) {
                     &show.publisher,
                     false,
                     false,
+                );
+                super::grid_navigation::virtual_card(
+                    app,
+                    ui,
+                    &card.response,
+                    Page::Show(id.clone()),
                 );
                 if card.clicked {
                     app.actions.push(Action::Open(Page::Show(id)));

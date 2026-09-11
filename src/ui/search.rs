@@ -417,6 +417,7 @@ fn artist_card(app: &mut App, ui: &mut egui::Ui, artist: &Artist) {
         true,
         true,
     );
+    super::grid_navigation::card(app, ui, &card.response, Page::Artist(artist.id.clone()));
     if card.play {
         app.actions.push(Action::PlayContext {
             uri: artist.uri.clone(),
@@ -473,6 +474,7 @@ fn album_card(app: &mut App, ui: &mut egui::Ui, album: &crate::api::models::Albu
         false,
         true,
     );
+    super::grid_navigation::card(app, ui, &card.response, Page::Album(album.id.clone()));
     if card.play {
         app.actions.push(Action::PlayContext {
             uri: album.uri.clone(),
@@ -524,6 +526,7 @@ fn playlist_card(app: &mut App, ui: &mut egui::Ui, playlist: &crate::api::models
         false,
         true,
     );
+    super::grid_navigation::card(app, ui, &card.response, Page::Playlist(playlist.id.clone()));
     if card.play {
         app.actions.push(Action::PlayContext {
             uri: playlist.uri.clone(),
@@ -586,6 +589,7 @@ fn show_card(app: &mut App, ui: &mut egui::Ui, show: &crate::api::models::Show) 
         false,
         false,
     );
+    super::grid_navigation::card(app, ui, &card.response, Page::Show(show.id.clone()));
     if card.clicked {
         app.actions.push(Action::Open(Page::Show(show.id.clone())));
     }

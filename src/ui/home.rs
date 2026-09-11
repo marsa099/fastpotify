@@ -150,6 +150,7 @@ fn quick_access(app: &mut App, ui: &mut egui::Ui) {
                     }
                 }
                 let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
+                super::grid_navigation::card(app, ui, &response, page.clone());
                 if response.clicked() {
                     app.actions.push(Action::Open(page.clone()));
                 }
@@ -219,6 +220,12 @@ fn made_for_you(app: &mut App, ui: &mut egui::Ui) {
                 &subtitle,
                 false,
                 true,
+            );
+            super::grid_navigation::card(
+                app,
+                ui,
+                &card.response,
+                Page::Playlist(playlist.id.clone()),
             );
             if card.play {
                 app.actions.push(Action::PlayContext {
@@ -292,6 +299,15 @@ fn recently_played(app: &mut App, ui: &mut egui::Ui) {
                 false,
                 true,
             );
+            if let Some(album) = track.album.as_ref().filter(|album| !album.id.is_empty()) {
+                super::grid_navigation::card_key(
+                    app,
+                    ui,
+                    &card.response,
+                    Page::Album(album.id.clone()),
+                    &track.uri,
+                );
+            }
             if card.play {
                 app.actions.push(Action::PlayUris {
                     uris: vec![track.uri.clone()],
@@ -346,6 +362,7 @@ fn top_artists(app: &mut App, ui: &mut egui::Ui) {
                 true,
                 true,
             );
+            super::grid_navigation::card(app, ui, &card.response, Page::Artist(artist.id.clone()));
             if card.play {
                 app.actions.push(Action::PlayContext {
                     uri: artist.uri.clone(),

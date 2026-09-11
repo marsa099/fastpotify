@@ -4,6 +4,7 @@ pub mod artist;
 pub mod collection;
 pub(crate) mod devices;
 mod dialogs;
+pub mod grid_navigation;
 pub mod home;
 mod keys;
 pub mod library;
@@ -104,6 +105,9 @@ fn page_tint(app: &mut App) -> Option<Color32> {
 }
 
 fn central(app: &mut App, ui: &mut egui::Ui) {
+    if app.settings.vim_keys {
+        app.actions.push(Action::GridFrame(app.page().clone()));
+    }
     let palette = app.palette;
     let tint = page_tint(app);
     egui::CentralPanel::default()
@@ -130,6 +134,19 @@ fn central(app: &mut App, ui: &mut egui::Ui) {
                 .id_salt(("page", page.encode()))
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    if app.settings.vim_keys {
+                        app.actions
+                            .push(Action::GridViewport(ui.clip_rect().height()));
+                    }
+                    if app.settings.vim_keys
+                        && app.grid_navigation.active_on(app.page())
+                        && app
+                            .navigation
+                            .active_pane(app.settings.sidebar_visible, app.show_queue_panel)
+                            == navigation::Pane::Main
+                    {
+                        navigation::outline(ui, ui.clip_rect());
+                    }
                     Frame::new()
                         .inner_margin(Margin {
                             left: widgets::PAGE_PADDING as i8,

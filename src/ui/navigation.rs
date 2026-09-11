@@ -48,6 +48,8 @@ pub enum Command {
     Clear,
     Left,
     Right,
+    PaneLeft,
+    PaneRight,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -79,6 +81,28 @@ impl Navigation {
 
     pub fn cursor(&self, pane: Pane) -> Cursor {
         self.cursors[pane as usize]
+    }
+}
+
+pub fn outline(ui: &egui::Ui, rect: egui::Rect) {
+    ui.painter().rect_stroke(
+        rect.shrink(1.0),
+        egui::CornerRadius::same(6),
+        egui::Stroke::new(2.0, ui.visuals().weak_text_color()),
+        egui::StrokeKind::Inside,
+    );
+}
+
+pub fn pane_move(app: &App, command: Command, pane: Pane) -> Option<bool> {
+    match command {
+        Command::PaneLeft => Some(false),
+        Command::PaneRight => Some(true),
+        Command::Left | Command::Right
+            if pane != Pane::Main || !app.grid_navigation.active_on(app.page()) =>
+        {
+            Some(command == Command::Right)
+        }
+        _ => None,
     }
 }
 
@@ -162,6 +186,10 @@ pub fn view(
             focused: false,
         };
     }
+    if pane == Pane::Main {
+        app.actions.push(Action::GridRows);
+    }
+    let grid_active = pane == Pane::Main && app.grid_navigation.active_on(app.page());
     let old = app.navigation.cursor(pane);
     // Route in event order: h followed by j within one frame must move a
     // sidebar row, not the main list that was focused at frame start.
@@ -171,26 +199,17 @@ pub fn view(
     let mut commands = Vec::new();
     for action in &app.actions {
         if let Action::Navigate(command) = action {
-            if active == pane {
+            if active == pane && !grid_active {
                 commands.push(*command);
             }
-            if matches!(command, Command::Left | Command::Right) {
-                active = active.adjacent(
-                    *command == Command::Right,
-                    app.settings.sidebar_visible,
-                    app.show_queue_panel,
-                );
+            if let Some(right) = pane_move(app, *command, active) {
+                active = active.adjacent(right, app.settings.sidebar_visible, app.show_queue_panel);
             }
         }
     }
-    let focused = active == pane;
+    let focused = active == pane && !grid_active;
     if focused {
-        ui.painter().rect_stroke(
-            ui.clip_rect().shrink(1.0),
-            3.0,
-            egui::Stroke::new(1.0, app.palette.accent.gamma_multiply(0.6)),
-            egui::StrokeKind::Inside,
-        );
+        outline(ui, ui.clip_rect());
     }
     let mut cursor = if old.owner == Some(owner) {
         old
@@ -219,6 +238,15 @@ pub fn view(
         cursor.row = len.checked_sub(1);
     } else if focused && cursor.start {
         cursor.row = (len > 0).then_some(0);
+    }
+    if focused
+        && pane == Pane::Main
+        && command == Some(Command::Down)
+        && old.row == len.checked_sub(1)
+        && app.grid_navigation.page.as_ref() == Some(app.page())
+        && !app.grid_navigation.cards.is_empty()
+    {
+        app.actions.push(Action::FocusGrid);
     }
     cursor.key = cursor.row.map(key_at);
     let changed = cursor != old;
@@ -360,6 +388,7 @@ mod tests {
         );
         output.textures_delta.clear();
         let actions = std::mem::take(&mut app.actions);
+        app.grid_navigation.prepare(&actions);
         for action in &actions {
             app.apply(action.clone(), ctx);
         }
@@ -862,6 +891,188 @@ mod tests {
                 app.actions.is_empty(),
                 "a queue row-body click with Vim disabled emits no playback or navigation actions"
             );
+        });
+    }
+
+    #[test]
+    fn grid_hjkl_moves_spatially_and_enter_opens_in_the_content_pane() {
+        with_app(|app, ctx| {
+            app.open(Page::Home);
+            app.show_queue_panel = true;
+            frame(app, ctx, vec![]);
+            frame(app, ctx, vec![]);
+            assert!(app.grid_navigation.active_on(&Page::Home));
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            let selected = |app: &App| {
+                app.grid_navigation
+                    .cards
+                    .iter()
+                    .find(|card| Some(card.id) == app.grid_navigation.selected)
+                    .unwrap()
+                    .clone()
+            };
+            let first = selected(app);
+            press(app, ctx, egui::Key::L, egui::Modifiers::NONE);
+            let right = selected(app);
+            assert!(right.rect.center().x > first.rect.center().x);
+            assert_eq!(app.page(), &Page::Home, "l moves, never opens a card");
+            assert_eq!(app.navigation.pane, Pane::Main);
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            assert!(selected(app).rect.center().y > right.rect.center().y);
+            press(app, ctx, egui::Key::K, egui::Modifiers::NONE);
+            assert_eq!(selected(app).id, right.id);
+            press(app, ctx, egui::Key::H, egui::Modifiers::NONE);
+            assert_eq!(selected(app).id, first.id);
+            press(app, ctx, egui::Key::L, egui::Modifiers::NONE);
+            let destination = selected(app).page;
+            press(app, ctx, egui::Key::Enter, egui::Modifiers::NONE);
+            assert_eq!(app.page(), &destination);
+            assert_eq!(app.navigation.pane, Pane::Main);
+            press(app, ctx, egui::Key::L, egui::Modifiers::CTRL);
+            assert_eq!(app.navigation.pane, Pane::Queue);
+            press(app, ctx, egui::Key::H, egui::Modifiers::CTRL);
+            assert_eq!(app.navigation.pane, Pane::Main);
+            press(app, ctx, egui::Key::H, egui::Modifiers::CTRL);
+            assert_eq!(app.navigation.pane, Pane::Sidebar);
+        });
+    }
+
+    #[test]
+    fn grid_virtual_cards_keep_offscreen_targets_and_scroll_to_the_last_card() {
+        with_app(|app, ctx| {
+            let template = app.library.albums.items[0].clone();
+            app.library.albums.items = (0..180)
+                .map(|index| {
+                    let mut saved = template.clone();
+                    saved.album.id = format!("grid-album-{index}");
+                    saved.album.uri = format!("spotify:album:grid-album-{index}");
+                    saved.album.name = format!("Grid album {index}");
+                    saved
+                })
+                .collect();
+            app.library.albums.next_offset = None;
+            app.open(Page::Albums);
+            for _ in 0..3 {
+                frame(app, ctx, vec![]);
+            }
+            assert_eq!(
+                app.grid_navigation.cards.len(),
+                180,
+                "rendered and virtual IDs must agree"
+            );
+            assert!(
+                app.grid_navigation
+                    .cards
+                    .iter()
+                    .filter(|card| card.response.is_some())
+                    .count()
+                    < 40
+            );
+            press(app, ctx, egui::Key::G, egui::Modifiers::SHIFT);
+            for _ in 0..30 {
+                frame(app, ctx, vec![]);
+            }
+            let card = app
+                .grid_navigation
+                .cards
+                .iter()
+                .find(|card| Some(card.id) == app.grid_navigation.selected)
+                .unwrap();
+            assert_eq!(card.page, Page::Album("grid-album-179".into()));
+            assert!(
+                card.response.is_some(),
+                "selected offscreen card must become rendered"
+            );
+            assert!(
+                app.grid_navigation
+                    .cards
+                    .iter()
+                    .filter(|card| card.response.is_some())
+                    .count()
+                    < 40
+            );
+            press(app, ctx, egui::Key::O, egui::Modifiers::NONE);
+            assert_eq!(app.page(), &Page::Album("grid-album-179".into()));
+        });
+    }
+
+    #[test]
+    fn grid_library_search_and_artist_cards_register_openable_targets() {
+        with_app(|app, ctx| {
+            for page in [Page::Albums, Page::Artists, Page::Podcasts] {
+                app.open(page.clone());
+                for _ in 0..2 {
+                    frame(app, ctx, vec![]);
+                }
+                assert!(app.grid_navigation.active_on(&page));
+                assert!(!app.grid_navigation.cards.is_empty());
+            }
+            for filter in [
+                crate::model::SearchFilter::Albums,
+                crate::model::SearchFilter::Artists,
+                crate::model::SearchFilter::Playlists,
+                crate::model::SearchFilter::Podcasts,
+            ] {
+                app.open(Page::Search);
+                app.search.filter = filter;
+                for _ in 0..2 {
+                    frame(app, ctx, vec![]);
+                }
+                assert!(!app.grid_navigation.cards.is_empty());
+                press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+                let destination = app
+                    .grid_navigation
+                    .cards
+                    .iter()
+                    .find(|card| Some(card.id) == app.grid_navigation.selected)
+                    .unwrap()
+                    .page
+                    .clone();
+                press(app, ctx, egui::Key::O, egui::Modifiers::NONE);
+                assert_eq!(app.page(), &destination);
+            }
+            app.open(Page::Artist("art0".into()));
+            for _ in 0..2 {
+                frame(app, ctx, vec![]);
+            }
+            assert!(!app.grid_navigation.active);
+            for _ in 0..6 {
+                press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            }
+            assert!(
+                app.grid_navigation.active,
+                "j below Popular enters the card grid"
+            );
+            assert!(app.grid_navigation.selected.is_some());
+            press(app, ctx, egui::Key::K, egui::Modifiers::NONE);
+            assert!(
+                !app.grid_navigation.active,
+                "k above the grid returns to Popular"
+            );
+        });
+    }
+
+    #[test]
+    fn grid_control_h_l_are_left_untouched_in_inputs() {
+        with_app(|app, ctx| {
+            for key in [egui::Key::H, egui::Key::L] {
+                let input_id = egui::Id::new("search-input-test");
+                ctx.memory_mut(|memory| memory.request_focus(input_id));
+                app.actions.clear();
+                let mut output = ctx.run_ui(egui::RawInput {
+                    events: vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::CTRL }],
+                    ..Default::default()
+                }, |_ui| {
+                    super::super::keys::handle(app, ctx);
+                    assert!(ctx.input(|input| input.events.iter().any(|event| matches!(event, egui::Event::Key { key: actual, pressed: true, .. } if *actual == key))));
+                });
+                output.textures_delta.clear();
+                assert!(
+                    !app.actions
+                        .iter()
+                        .any(|action| matches!(action, Action::Navigate(_) | Action::Open(_)))
+                );
+            }
         });
     }
 

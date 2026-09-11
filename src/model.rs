@@ -707,6 +707,12 @@ pub struct Toast {
 #[derive(Clone, Debug)]
 pub enum Action {
     Navigate(crate::ui::navigation::Command),
+    GridFrame(Page),
+    GridViewport(f32),
+    GridRows,
+    GridCard(crate::ui::grid_navigation::Card),
+    GridScrolled(egui::Id),
+    FocusGrid,
     NavigationFocus(crate::ui::navigation::Pane),
     NavigationCursor {
         pane: crate::ui::navigation::Pane,

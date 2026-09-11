@@ -268,24 +268,34 @@ On macOS, `Cmd` replaces `Ctrl`.
 
 Enable **Settings → Keyboard → Vim keys** (off by default). There is no
 insert/normal mode. These keys yield to text fields, focused controls, menus,
-and dialogs. Card grids are not covered.
+and dialogs, including `Ctrl+h` and `Ctrl+l` while an input is focused.
 
 | Shortcut | What it does |
 | --- | --- |
-| `h` / `l` | Focus the visible pane to the left / right: library, main list, queue |
-| `j` / `k` | Select the next / previous row and scroll it into view |
-| `gg` / `G` (`Shift+g`) | First / last row; lazy-loaded lists fetch remaining pages for `G` |
+| `Ctrl+h` / `Ctrl+l` | Focus the visible pane to the left / right: library, main content, queue |
+| `h` / `j` / `k` / `l` | Move left / down / up / right between cards; `h/l` still switch panes in lists |
+| `j` / `k` | Select the next / previous list row and scroll it into view |
+| `gg` / `G` (`Shift+g`) | First / last row; lazy-loaded lists fetch remaining pages for `G`. In grids, first / last loaded card |
 | `Ctrl+d` / `Ctrl+u` | Move half the pane's visible height, also using Control on macOS |
-| `Enter` | Play the selected song; open a library entry or toggle a folder |
-| `o` | Open the selected song's album (or an episode's show); open library entries |
+| `Enter` | Open the selected card; play a selected song; open a library entry or toggle a folder |
+| `o` | Open the selected card, song's album, episode's show, or library entry |
 | `Esc` | Clear the focused list's selection |
 | `Shift+L` | Show lyrics, replacing bare `l` only while Vim keys are enabled |
 
 Works in collection tables, search-result song lists, artist Popular tracks,
-the library sidebar, and the queue and Recent panel. Preview sections navigate
-the rows currently shown. `gg` requires two presses within 750 ms; another
-key cancels the prefix. Another navigation key cancels a pending `G` end jump.
-Playing a queue row uses the same skip-to-row action as a mouse click.
+the library sidebar, and the queue and Recent panel. Cards are supported on
+Home (including shelves), library grids, search-result grids, and artist pages.
+`l` moves right in a grid, never opens a card. `o` or `Enter` opens it with
+focus in the content pane. On mixed track/card pages, `j` below the last track
+enters the cards; `k` above the first card returns to the tracks.
+
+The focused pane has a rounded gray outline. `Ctrl+h/l` use Control on macOS
+too. While Vim keys are enabled they replace Home/Liked Songs on Linux and
+Windows, but leave all input fields alone. macOS Command shortcuts stay intact.
+Preview sections navigate the rows currently shown. `gg` requires two presses
+within 750 ms; another key cancels the prefix. Another navigation key cancels
+a pending `G` end jump. Playing a queue row uses the same skip-to-row action
+as a mouse click.
 
 ## Controlling it from outside
 

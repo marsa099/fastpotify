@@ -50,10 +50,14 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
                 Key::H,
                 Action::Open(Page::Home),
             );
-        } else {
+        } else if !vim {
             key(Modifiers::COMMAND, Key::H, Action::Open(Page::Home));
         }
-        key(Modifiers::COMMAND, Key::L, Action::Open(Page::LikedSongs));
+        // Ctrl+h/l belong to pane navigation in Vim mode, but remain entirely
+        // untouched while an input has focus. Do not fall back to Home/Liked.
+        if !vim || cfg!(target_os = "macos") {
+            key(Modifiers::COMMAND, Key::L, Action::Open(Page::LikedSongs));
+        }
         // Cmd+M minimises on macOS.
         if cfg!(target_os = "macos") {
             key(
@@ -231,6 +235,8 @@ fn vim_commands(
             match key {
                 Key::D => Some(Command::HalfDown),
                 Key::U => Some(Command::HalfUp),
+                Key::H => Some(Command::PaneLeft),
+                Key::L => Some(Command::PaneRight),
                 _ => None,
             }
         } else {
@@ -263,14 +269,24 @@ pub const SHORTCUTS: &[(&str, &str)] = &[
     ("R", "Cycle repeat"),
     ("Q", "Show the queue"),
     ("L (Shift+L with Vim keys)", "Show the lyrics"),
-    ("h / l", "Vim keys: focus left / right pane"),
+    (
+        "h / j / k / l",
+        "Vim keys: spatial card selection (h/l switch panes in lists)",
+    ),
     ("j / k", "Vim keys: select next / previous row"),
+    (
+        "Control+h / Control+l",
+        "Vim keys: switch panes (not in inputs; replaces Home/Liked Songs on Linux/Windows)",
+    ),
     (
         "gg / Shift+G",
         "Vim keys: first / last row (loads remaining pages)",
     ),
     ("Control+d / Control+u", "Vim keys: half-page down / up"),
-    ("Enter / o", "Vim keys: play or open / open album"),
+    (
+        "Enter / o",
+        "Vim keys: open card; in lists, play / open album",
+    ),
     ("Esc", "Vim keys: clear selection"),
     (platform_shortcut("Ctrl+F  or  /", "Cmd+F  or  /"), "Search"),
     (SIDEBAR_SHORTCUT, "Show or hide the sidebar"),
@@ -370,6 +386,20 @@ mod tests {
         );
         assert_eq!(events.len(), 3);
         assert_eq!(prefix, None);
+    }
+
+    #[test]
+    fn vim_pane_shortcuts_require_control_with_or_without_the_command_flag() {
+        use super::super::navigation::Command;
+        for modifiers in [Modifiers::CTRL, Modifiers::CTRL | Modifiers::COMMAND] {
+            let mut events = vec![
+                event(Key::H, modifiers, false),
+                event(Key::L, modifiers, false),
+            ];
+            let (commands, _) = vim_commands(&mut events, 0.0, None);
+            assert_eq!(commands, vec![Command::PaneLeft, Command::PaneRight]);
+            assert!(events.is_empty());
+        }
     }
 
     #[test]

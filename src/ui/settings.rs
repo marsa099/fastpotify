@@ -483,7 +483,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             ui,
             &palette,
             "Vim keys",
-            "h/l: panes · j/k: rows · gg/G: first/last · Ctrl+d/u: half-page · Enter: play/open · o: album · Esc: clear · Shift+L: lyrics",
+            "hjkl: cards · j/k: rows · Ctrl+h/l: panes (outside inputs) · Enter/o: open card · Esc: clear · Shift+L: lyrics",
             |ui| {
                 if widgets::switch(ui, &palette, "Vim keys", &mut app.settings.vim_keys).changed() {
                     changed = true;
