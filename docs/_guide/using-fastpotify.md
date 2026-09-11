@@ -58,7 +58,9 @@ The setting defaults to off and does not change existing shortcuts until enabled
 Text fields, focused controls, menus, and dialogs keep their normal keyboard input.
 
 Use `Ctrl+h` and `Ctrl+l` to focus the visible library, main content, or queue
-pane. A rounded, two-point gray outline marks the active pane. These shortcuts
+pane. A rounded, two-point gray outline marks the active pane. The sidebar and
+main-content outlines have consistent padding inside and outside, so scrolling
+rows and selection borders never touch them. These shortcuts
 leave input fields alone, including search and filters. In Vim mode they
 replace Home/Liked Songs on Linux and Windows; macOS Command shortcuts are
 unchanged. `gh` opens Home and focuses its content; press the two keys within
@@ -74,8 +76,11 @@ a card: use `o` or `Enter` to open it and focus the content pane. Cards outside
 the viewport scroll into view, including virtualized library grids and cards
 inside horizontal shelves. On Home, `h` at the leftmost card moves focus to
 the sidebar if it is visible. `gg/G`
-select the first/last loaded card. On pages mixing tracks and cards, `j` below
-the last track enters the cards, and `k` above the first card returns to tracks.
+select the first/last loaded item. On Search and artist pages, `j` below the
+last track enters the cards, and `k` above the first card returns to tracks.
+Home follows display order in both directions: `j` moves from Your top artists
+into Your top songs and then recommendations; `k` moves back up. Enter plays
+the selected Home song and `o` opens its album.
 In track lists, bare `h/l` retain their pane-switching behavior. In the left
 sidebar, `l` opens the selected playlist or other entry and focuses its
 content. A selected folder toggles without moving focus. With no selection,

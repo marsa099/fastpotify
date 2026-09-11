@@ -434,24 +434,44 @@ fn track_list(
     let context = RowContext::Uris(Arc::clone(&uris));
     for (index, track) in tracks.iter().take(limit).enumerate() {
         let item = PlayableItem::Track(track.clone());
-        widgets::track_row(
-            ui,
+        let id = egui::Id::new(("home-track", title, index, item.uri()));
+        let picked = app.settings.vim_keys
+            && app.grid_navigation.active_on(app.page())
+            && app
+                .navigation
+                .active_pane(app.settings.sidebar_visible, app.show_queue_panel)
+                == super::navigation::Pane::Main
+            && app.grid_navigation.selected == Some(id);
+        let row = ui.push_id(id, |ui| {
+            widgets::track_row(
+                ui,
+                app,
+                TrackRow {
+                    index,
+                    number: None,
+                    item: &item,
+                    context: &context,
+                    show_cover: !app.settings.tracklist_compact,
+                    show_album: true,
+                    added_at: None,
+                    added_by: None,
+                    show_added_by: false,
+                    compact: false,
+                    thin: app.settings.tracklist_compact,
+                    shift: 0.0,
+                    picked,
+                    picked_songs: &[],
+                },
+            )
+        });
+        super::grid_navigation::track(
             app,
-            TrackRow {
+            &row.response,
+            id,
+            super::grid_navigation::TrackTarget {
+                item,
+                context: context.clone(),
                 index,
-                number: None,
-                item: &item,
-                context: &context,
-                show_cover: !app.settings.tracklist_compact,
-                show_album: true,
-                added_at: None,
-                added_by: None,
-                show_added_by: false,
-                compact: false,
-                thin: app.settings.tracklist_compact,
-                shift: 0.0,
-                picked: false,
-                picked_songs: &[],
             },
         );
     }

@@ -94,10 +94,52 @@ pub fn outline(ui: &egui::Ui, rect: egui::Rect) {
     );
 }
 
+/// Reserve equal space outside the focus ring and between it and the scroll
+/// viewport. Keeping this outside ScrollArea preserves the gap while scrolling.
+pub fn pane_frame<R>(
+    app: &mut App,
+    ui: &mut egui::Ui,
+    pane: Pane,
+    draw: impl FnOnce(&mut App, &mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    let enabled = app.settings.vim_keys && (pane != Pane::Main || app.page() != &Page::Settings);
+    let frame = egui::Frame::new()
+        .inner_margin(if enabled { 16 } else { 0 })
+        .show(ui, |ui| {
+            if enabled {
+                ui.set_clip_rect(ui.clip_rect().intersect(ui.max_rect()));
+            }
+            draw(app, ui)
+        });
+    let navigable = pane != Pane::Main
+        || app.grid_navigation.active_on(app.page())
+        || app
+            .actions
+            .iter()
+            .any(|action| matches!(action, Action::GridRows));
+    if enabled
+        && navigable
+        && app
+            .navigation
+            .active_pane(app.settings.sidebar_visible, app.show_queue_panel)
+            == pane
+    {
+        outline(ui, frame.response.rect.shrink(8.0));
+    }
+    frame
+}
+
 pub fn pane_move(app: &App, command: Command, pane: Pane) -> Option<bool> {
     match command {
         Command::PaneLeft => Some(false),
         Command::PaneRight => Some(true),
+        Command::Left | Command::Right
+            if pane == Pane::Main
+                && app.grid_navigation.active_on(app.page())
+                && app.grid_navigation.selected_row().is_some() =>
+        {
+            Some(command == Command::Right)
+        }
         Command::Left
             if pane == Pane::Main
                 && app.page() == &Page::Home
@@ -221,7 +263,7 @@ pub fn view(
         }
     }
     let focused = active == pane && !grid_active;
-    if focused {
+    if focused && pane == Pane::Queue {
         outline(ui, ui.clip_rect());
     }
     let mut cursor = if old.owner == Some(owner) {
@@ -1314,6 +1356,154 @@ mod tests {
                     .iter()
                     .any(|action| matches!(action, Action::ShowDialog(_)))
             );
+        });
+    }
+
+    #[test]
+    fn home_artists_connect_to_song_sections_and_rows_keep_their_actions() {
+        with_app(|app, ctx| {
+            app.open(Page::Home);
+            frame(app, ctx, vec![]);
+            let artist = app
+                .grid_navigation
+                .cards
+                .iter()
+                .find(|card| matches!(card.page, Page::Artist(_)))
+                .unwrap()
+                .id;
+            app.grid_navigation.selected = Some(artist);
+            app.grid_navigation.scroll = Some(artist);
+            settle_grid(app, ctx);
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            let first = app.grid_navigation.selected.unwrap();
+            assert_eq!(app.grid_navigation.selected_row().unwrap().index, 0);
+            let row = app.grid_navigation.selected_row().unwrap().clone();
+            assert!(
+                matches!(app.grid_navigation.navigate(Command::Play), Some(Action::PlayFromRow { uri, index: 0, context: crate::model::RowContext::Uris(uris) }) if uri == row.item.uri() && uris[0] == uri)
+            );
+            assert!(matches!(
+                app.grid_navigation.navigate(Command::Open),
+                Some(Action::Open(Page::Album(_)))
+            ));
+            let viewport = settle_grid(app, ctx);
+            let rect = app
+                .grid_navigation
+                .cards
+                .iter()
+                .find(|card| card.id == first)
+                .unwrap()
+                .rect;
+            assert!(viewport.contains_rect(rect.shrink(1.0)));
+            press(app, ctx, egui::Key::K, egui::Modifiers::NONE);
+            assert!(app.grid_navigation.selected_row().is_none());
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            assert_eq!(app.grid_navigation.selected, Some(first));
+            for _ in 0..10 {
+                press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            }
+            assert_eq!(
+                app.grid_navigation.selected_row().unwrap().index,
+                0,
+                "next section starts at its first song"
+            );
+            assert_ne!(app.grid_navigation.selected, Some(first));
+            press(app, ctx, egui::Key::K, egui::Modifiers::NONE);
+            assert_eq!(app.grid_navigation.selected_row().unwrap().index, 9);
+            press(app, ctx, egui::Key::H, egui::Modifiers::NONE);
+            assert_eq!(app.navigation.pane, Pane::Sidebar);
+        });
+    }
+
+    #[test]
+    fn home_song_targets_are_invalidated_and_unavailable_tracks_cannot_play() {
+        with_app(|app, ctx| {
+            app.open(Page::Home);
+            frame(app, ctx, vec![]);
+            let card = app
+                .grid_navigation
+                .cards
+                .iter_mut()
+                .find(|card| card.row.is_some())
+                .unwrap();
+            let id = card.id;
+            if let crate::api::models::PlayableItem::Track(track) =
+                &mut card.row.as_mut().unwrap().item
+            {
+                track.is_playable = Some(false);
+                track.album = None;
+            }
+            app.grid_navigation.selected = Some(id);
+            assert!(app.grid_navigation.navigate(Command::Play).is_none());
+            assert!(app.grid_navigation.navigate(Command::Open).is_none());
+            app.home.top_tracks = crate::model::Loadable::Loaded(vec![]);
+            frame(app, ctx, vec![]);
+            assert!(app.grid_navigation.selected.is_none());
+            assert!(app.grid_navigation.navigate(Command::Play).is_none());
+        });
+    }
+
+    #[test]
+    fn pane_borders_have_equal_inside_and_outside_gaps_in_both_themes() {
+        with_app(|app, ctx| {
+            for dark in [false, true] {
+                ctx.set_visuals(if dark {
+                    egui::Visuals::dark()
+                } else {
+                    egui::Visuals::light()
+                });
+                for width in [760.0, 1280.0] {
+                    for pane in [Pane::Main, Pane::Sidebar] {
+                        let mut measured = None;
+                        let mut output = ctx.run_ui(
+                            egui::RawInput {
+                                screen_rect: Some(egui::Rect::from_min_size(
+                                    egui::Pos2::ZERO,
+                                    egui::vec2(width, 600.0),
+                                )),
+                                ..Default::default()
+                            },
+                            |ui| {
+                                let framed = pane_frame(app, ui, pane, |_app, ui| {
+                                    let clip = ui.clip_rect();
+                                    ui.allocate_exact_size(
+                                        ui.available_size(),
+                                        egui::Sense::hover(),
+                                    );
+                                    clip
+                                });
+                                measured = Some((framed.response.rect, framed.inner));
+                            },
+                        );
+                        output.textures_delta.clear();
+                        let (outer, clip) = measured.unwrap();
+                        let border = outer.shrink(8.0);
+                        for gap in [
+                            clip.left() - border.left(),
+                            clip.top() - border.top(),
+                            border.right() - clip.right(),
+                            border.bottom() - clip.bottom(),
+                        ] {
+                            assert!((gap - 8.0).abs() < 0.1, "uniform protected gap: {gap}");
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn pane_spacing_is_disabled_without_vim_keys() {
+        with_app(|app, ctx| {
+            app.settings.vim_keys = false;
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let framed = pane_frame(app, ui, Pane::Main, |_app, ui| {
+                    let rect = ui.available_rect_before_wrap();
+                    ui.allocate_exact_size(rect.size(), egui::Sense::hover());
+                    rect
+                });
+                assert_eq!(framed.response.rect, framed.inner);
+            });
+            output.textures_delta.clear();
         });
     }
 

@@ -279,7 +279,7 @@ and dialogs, including `Ctrl+h` and `Ctrl+l` while an input is focused.
 | `gh` | Open Home and focus its content |
 | `?` | Show all shortcuts (outside input fields) |
 | `j` / `k` | Select the next / previous list row and scroll it into view |
-| `gg` / `G` (`Shift+g`) | First / last row; lazy-loaded lists fetch remaining pages for `G`. In grids, first / last loaded card |
+| `gg` / `G` (`Shift+g`) | First / last row; lazy-loaded lists fetch remaining pages for `G`. In grids and Home, first / last loaded item |
 | `Ctrl+d` / `Ctrl+u` | Move half the pane's visible height, also using Control on macOS |
 | `Enter` | Open the selected card; play a selected song; open a library entry or toggle a folder |
 | `o` | Open the selected card, song's album, episode's show, or library entry |
@@ -292,10 +292,14 @@ Home (including shelves), library grids, search-result grids, and artist pages.
 `l` moves right in a grid, never opens a card. `o` or `Enter` opens it with
 focus in the content pane. In the left sidebar, `l` opens the selected playlist
 (or other entry) and focuses its content. With no selection, `l` does nothing;
-`Ctrl+l` always remains a pane-only switch. On mixed track/card pages, `j` below the last track
-enters the cards; `k` above the first card returns to the tracks.
+`Ctrl+l` always remains a pane-only switch. On Search and artist pages, `j`
+below the last track enters the cards; `k` above the first card returns to tracks.
+On Home, `j/k` follows the displayed order through shelves, Your top artists,
+Your top songs, and recommendations. Enter plays a Home song; `o` opens its album.
 
-The focused pane has a rounded gray outline. `Ctrl+h/l` use Control on macOS
+The focused pane has a rounded gray outline. Sidebar and main-content outlines
+have consistent padding from rows and panel edges, including while scrolling.
+`Ctrl+h/l` use Control on macOS
 too. While Vim keys are enabled they replace Home/Liked Songs on Linux and
 Windows, but leave all input fields alone. macOS Command shortcuts stay intact.
 The page follows the selected card through horizontal shelves as well as grids.

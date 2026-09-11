@@ -5777,9 +5777,9 @@ impl App {
                     );
                     ctx.request_repaint();
                 } else if previous == Pane::Main && self.grid_navigation.active_on(self.page()) {
-                    if let Some(page) = self.grid_navigation.navigate(command) {
+                    if let Some(action) = self.grid_navigation.navigate(command) {
                         self.navigation.pane = Pane::Main;
-                        self.open(page);
+                        self.apply(action, ctx);
                     }
                     ctx.request_repaint();
                 }

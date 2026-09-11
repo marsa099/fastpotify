@@ -14,6 +14,14 @@ pub struct Card {
     pub page: Page,
     pub rect: Rect,
     pub response: Option<Id>,
+    pub row: Option<Box<TrackTarget>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TrackTarget {
+    pub item: crate::api::models::PlayableItem,
+    pub context: crate::model::RowContext,
+    pub index: usize,
 }
 
 #[derive(Default)]
@@ -30,6 +38,14 @@ pub struct GridNavigation {
 impl GridNavigation {
     pub fn active_on(&self, page: &Page) -> bool {
         self.page.as_ref() == Some(page) && self.active && !self.cards.is_empty()
+    }
+
+    pub fn selected_row(&self) -> Option<&TrackTarget> {
+        self.cards
+            .iter()
+            .find(|card| Some(card.id) == self.selected)?
+            .row
+            .as_deref()
     }
 
     pub fn at_left_edge(&self) -> bool {
@@ -95,12 +111,26 @@ impl GridNavigation {
         }
     }
 
-    pub fn navigate(&mut self, command: Command) -> Option<Page> {
+    pub fn navigate(&mut self, command: Command) -> Option<Action> {
         let current = self
             .selected
             .and_then(|id| self.cards.iter().position(|card| card.id == id));
         if matches!(command, Command::Play | Command::Open) {
-            return current.map(|index| self.cards[index].page.clone());
+            let card = self.cards.get(current?)?;
+            if let Some(row) = &card.row {
+                return match command {
+                    Command::Play if super::navigation::can_play(&row.item) => {
+                        Some(Action::PlayFromRow {
+                            context: row.context.clone(),
+                            uri: row.item.uri().to_string(),
+                            index: row.index as u32,
+                        })
+                    }
+                    Command::Open => super::navigation::album(&row.item),
+                    _ => None,
+                };
+            }
+            return Some(Action::Open(card.page.clone()));
         }
         if command == Command::Clear {
             self.selected = None;
@@ -223,6 +253,7 @@ fn register(app: &mut App, ui: &mut egui::Ui, response: &egui::Response, page: P
         page,
         rect: response.rect,
         response: Some(response.id),
+        row: None,
     }));
     if app.grid_navigation.active_on(app.page())
         && app
@@ -238,6 +269,21 @@ fn register(app: &mut App, ui: &mut egui::Ui, response: &egui::Response, page: P
             response.scroll_to_me(None);
         }
     }
+}
+
+/// Home interleaves shelves and track sections. Publish rows in the same
+/// geometry stream so vertical movement follows the actual display order.
+pub fn track(app: &mut App, response: &egui::Response, id: Id, target: TrackTarget) {
+    if !app.settings.vim_keys {
+        return;
+    }
+    app.actions.push(Action::GridCard(Card {
+        id,
+        page: Page::Home,
+        rect: response.rect,
+        response: Some(response.id),
+        row: Some(Box::new(target)),
+    }));
 }
 
 /// Publish offscreen cards too, while keeping their actual rendering virtual.
@@ -270,6 +316,7 @@ pub fn virtual_cards(app: &mut App, ui: &mut egui::Ui, pages: &[Page], height: f
             page: page.clone(),
             rect,
             response: None,
+            row: None,
         }));
     }
 }
@@ -313,6 +360,7 @@ mod tests {
                     egui::vec2(90.0, 90.0),
                 ),
                 response: None,
+                row: None,
             })
             .collect()
     }
@@ -351,8 +399,10 @@ mod tests {
         ]);
         assert!(grid.active);
         assert!(grid.selected.is_none());
-        assert_eq!(grid.navigate(Command::Open), None);
+        assert!(grid.navigate(Command::Open).is_none());
         grid.navigate(Command::Down);
-        assert_eq!(grid.navigate(Command::Play), Some(cards[1].page.clone()));
+        assert!(
+            matches!(grid.navigate(Command::Play), Some(Action::Open(page)) if page == cards[1].page)
+        );
     }
 }
