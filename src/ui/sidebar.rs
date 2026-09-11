@@ -9,8 +9,29 @@ use crate::model::{Action, Dialog, DragEntry, DragTrack, Loadable, Page};
 use crate::settings::{LIKED_SONGS_KEY, LibraryShelf as Filter, LibrarySort};
 use crate::theme::{self, Icon, Palette};
 
+use super::navigation::Pane;
+
 const DEFAULT_ROW_HEIGHT: f32 = 60.0;
 const COMPACT_ROW_HEIGHT: f32 = 32.0;
+const PANEL_MARGIN: Margin = Margin {
+    left: 12,
+    right: 8,
+    top: 0,
+    bottom: 8,
+};
+
+fn list_bounds(mut rect: Rect, vim: bool, art_visible: bool) -> Rect {
+    if vim {
+        rect.min.x -= PANEL_MARGIN.left as f32;
+        rect.max.x += PANEL_MARGIN.right as f32;
+        // An expanded cover owns the space below the list. Only compensate
+        // the panel's bottom margin when the list reaches the panel bottom.
+        if !art_visible {
+            rect.max.y += PANEL_MARGIN.bottom as f32;
+        }
+    }
+    rect
+}
 
 struct Entry {
     image: Option<String>,
@@ -223,10 +244,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         .size_range(210.0..=440.0)
         .show_separator_line(false)
         .frame(Frame::new().fill(palette.panel).inner_margin(Margin {
-            left: 12,
-            right: 8,
             top,
-            bottom: 8,
+            ..PANEL_MARGIN
         }));
     let response = panel.show(ui, |ui| {
         art_panel(app, ui);
@@ -822,7 +841,17 @@ fn contents(app: &mut App, ui: &mut egui::Ui) {
     let context_playing = app.believed_playing();
     let current_page = app.page().clone();
 
-    super::navigation::pane_frame(app, ui, super::navigation::Pane::Sidebar, |app, ui| {
+    // The header keeps its existing panel margins. The list's focus frame
+    // starts at the panel edges, just like the central pane, rather than
+    // adding a second inset on top of those header margins.
+    let allocated = ui.available_rect_before_wrap();
+    let art_visible = app.settings.art_expanded
+        && app
+            .now_playing()
+            .is_some_and(|now| now.art_url.is_some() || now.art_small.is_some());
+    let bounds = list_bounds(allocated, app.settings.vim_keys, art_visible);
+    let mut list_ui = ui.new_child(egui::UiBuilder::new().max_rect(bounds));
+    super::navigation::pane_frame(app, &mut list_ui, Pane::Sidebar, |app, ui| {
         egui::ScrollArea::vertical()
             .id_salt("sidebar-list")
             .auto_shrink([false, false])
@@ -1338,6 +1367,9 @@ fn contents(app: &mut App, ui: &mut egui::Ui) {
                 }
             });
     });
+    // Allocate only the original content bounds: including the expanded
+    // frame would make a resizable sidebar grow on every frame.
+    ui.advance_cursor_after_rect(allocated);
 }
 
 fn pin_menu(app: &mut App, ui: &mut egui::Ui, key: &str) {
@@ -1512,6 +1544,24 @@ pub fn liked_cover(ui: &egui::Ui, rect: Rect, radius: f32) {
     Icon::HeartFilled
         .image(egui::Color32::WHITE, size)
         .paint_at(ui, icon_rect);
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    #[test]
+    fn list_expands_to_panel_edges_without_covering_expanded_art() {
+        let rect = Rect::from_min_max(pos2(12.0, 280.0), pos2(242.0, 704.0));
+        let full = list_bounds(rect, true, false);
+        assert_eq!(
+            full,
+            Rect::from_min_max(pos2(0.0, 280.0), pos2(250.0, 712.0))
+        );
+        assert_eq!(list_bounds(rect, true, true).bottom(), rect.bottom());
+        assert_eq!(list_bounds(rect, false, false), rect);
+        assert_eq!(list_bounds(rect, false, true), rect);
+    }
 }
 
 #[cfg(all(test, feature = "demo"))]

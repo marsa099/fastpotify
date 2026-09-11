@@ -299,6 +299,8 @@ Your top songs, and recommendations. Enter plays a Home song; `o` opens its albu
 
 The focused pane has a rounded gray outline. Sidebar and main-content outlines
 have consistent padding from rows and panel edges, including while scrolling.
+Their left, right, and bottom panel-edge insets match; sidebar header margins
+are not added again around the playlist list.
 `Ctrl+h/l` use Control on macOS
 too. While Vim keys are enabled they replace Home/Liked Songs on Linux and
 Windows, but leave all input fields alone. macOS Command shortcuts stay intact.

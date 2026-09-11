@@ -1443,6 +1443,82 @@ mod tests {
     }
 
     #[test]
+    fn sidebar_and_center_borders_share_panel_edge_insets_without_resizing() {
+        fn borders(shape: &egui::epaint::Shape, rects: &mut Vec<egui::Rect>) {
+            match shape {
+                egui::epaint::Shape::Vec(shapes) => {
+                    for shape in shapes {
+                        borders(shape, rects);
+                    }
+                }
+                egui::epaint::Shape::Rect(rect)
+                    if rect.stroke.width == 2.0
+                        && rect.rect.height() > 120.0
+                        && rect.rect.width() > 100.0 =>
+                {
+                    rects.push(rect.rect)
+                }
+                _ => {}
+            }
+        }
+        for width in [760.0, 1280.0] {
+            with_app(|app, ctx| {
+                app.open(Page::Home);
+                app.show_queue_panel = false;
+                frame(app, ctx, vec![]);
+                let sidebar_width = app.settings.sidebar_width;
+                let mut edges = Vec::new();
+                for pane in [Pane::Sidebar, Pane::Main] {
+                    app.navigation.pane = pane;
+                    for _ in 0..4 {
+                        let mut output = ctx.run_ui(
+                            egui::RawInput {
+                                screen_rect: Some(egui::Rect::from_min_size(
+                                    egui::Pos2::ZERO,
+                                    egui::vec2(width, 800.0),
+                                )),
+                                ..Default::default()
+                            },
+                            |ui| crate::ui::show(app, ui),
+                        );
+                        output.textures_delta.clear();
+                        let mut rects = Vec::new();
+                        for shape in &output.shapes {
+                            borders(&shape.shape, &mut rects);
+                        }
+                        let rect = rects
+                            .into_iter()
+                            .find(|rect| match pane {
+                                Pane::Sidebar => rect.right() <= sidebar_width,
+                                _ => rect.left() >= sidebar_width,
+                            })
+                            .expect("focused pane outline");
+                        let (left, right) = if pane == Pane::Sidebar {
+                            (rect.left(), sidebar_width - rect.right())
+                        } else {
+                            (rect.left() - sidebar_width, width - rect.right())
+                        };
+                        assert!(
+                            (left - 9.0).abs() < 1.0 && (right - 9.0).abs() < 1.0,
+                            "same panel-edge gap for {pane:?}: left={left}, right={right}"
+                        );
+                        assert_eq!(
+                            app.settings.sidebar_width, sidebar_width,
+                            "frame must not enlarge sidebar"
+                        );
+                        edges.push(rect.bottom());
+                        app.actions.clear();
+                    }
+                }
+                assert!(
+                    edges.iter().all(|bottom| (bottom - edges[0]).abs() < 1.0),
+                    "both frames must end at the same distance above the player bar: {edges:?}"
+                );
+            });
+        }
+    }
+
+    #[test]
     fn pane_borders_have_equal_inside_and_outside_gaps_in_both_themes() {
         with_app(|app, ctx| {
             for dark in [false, true] {
