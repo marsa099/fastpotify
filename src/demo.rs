@@ -2529,6 +2529,10 @@ mod tests {
         output.textures_delta.clear();
 
         let dialog = app.dialog_rect.expect("the dialog drew itself");
+        assert!(
+            dialog.left() >= -1.0 && dialog.right() <= 901.0,
+            "shortcut explanations must wrap within the window: {dialog:?}"
+        );
         let bottom = dialog.max.y;
         assert!(
             bottom <= height + 1.0,

@@ -275,6 +275,9 @@ and dialogs, including `Ctrl+h` and `Ctrl+l` while an input is focused.
 | `Ctrl+h` / `Ctrl+l` | Focus the visible pane to the left / right: library, main content, queue |
 | `h` / `j` / `k` / `l` | Move left / down / up / right between cards; `h/l` still switch panes in track lists |
 | `l` in the sidebar | Open the selected entry and focus its content; folders toggle without leaving the sidebar |
+| `h` at Home's left edge | Focus the sidebar, if it is visible |
+| `gh` | Open Home and focus its content |
+| `?` | Show all shortcuts (outside input fields) |
 | `j` / `k` | Select the next / previous list row and scroll it into view |
 | `gg` / `G` (`Shift+g`) | First / last row; lazy-loaded lists fetch remaining pages for `G`. In grids, first / last loaded card |
 | `Ctrl+d` / `Ctrl+u` | Move half the pane's visible height, also using Control on macOS |
@@ -295,8 +298,9 @@ enters the cards; `k` above the first card returns to the tracks.
 The focused pane has a rounded gray outline. `Ctrl+h/l` use Control on macOS
 too. While Vim keys are enabled they replace Home/Liked Songs on Linux and
 Windows, but leave all input fields alone. macOS Command shortcuts stay intact.
-Preview sections navigate the rows currently shown. `gg` requires two presses
-within 750 ms; another key cancels the prefix. Another navigation key cancels
+The page follows the selected card through horizontal shelves as well as grids.
+Preview sections navigate the rows currently shown. `gg` and `gh` require two
+presses within 750 ms; an unrelated key cancels the prefix. Another navigation key cancels
 a pending `G` end jump. Playing a queue row uses the same skip-to-row action
 as a mouse click.
 

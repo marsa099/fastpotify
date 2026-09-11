@@ -135,8 +135,7 @@ fn central(app: &mut App, ui: &mut egui::Ui) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     if app.settings.vim_keys {
-                        app.actions
-                            .push(Action::GridViewport(ui.clip_rect().height()));
+                        app.actions.push(Action::GridViewport(ui.clip_rect()));
                     }
                     if app.settings.vim_keys
                         && app.grid_navigation.active_on(app.page())
@@ -172,6 +171,7 @@ fn central(app: &mut App, ui: &mut egui::Ui) {
                                 Page::Settings => settings::show(app, ui),
                             }
                         });
+                    grid_navigation::scroll_page(app, ui);
                 });
         });
 }

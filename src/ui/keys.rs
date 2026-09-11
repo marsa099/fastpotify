@@ -18,8 +18,12 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
     let typing = ctx.memory(|memory| memory.focused().is_some());
     let mut actions = Vec::new();
     let vim = app.settings.vim_keys;
+    let help = !typing && ctx.input_mut(|input| consume_shortcut_help(&mut input.events));
+    if help {
+        actions.push(Action::ShowDialog(Dialog::Shortcuts));
+    }
     let blocked =
-        typing || app.dialog.is_some() || app.show_devices || egui::Popup::is_any_open(ctx);
+        typing || help || app.dialog.is_some() || app.show_devices || egui::Popup::is_any_open(ctx);
     if vim && !blocked {
         let (commands, prefix) =
             ctx.input_mut(|input| vim_commands(&mut input.events, input.time, app.navigation.g_at));
@@ -106,16 +110,6 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
             );
         }
         if !typing {
-            key(
-                Modifiers::NONE,
-                Key::Questionmark,
-                Action::ShowDialog(Dialog::Shortcuts),
-            );
-            key(
-                Modifiers::SHIFT,
-                Key::Questionmark,
-                Action::ShowDialog(Dialog::Shortcuts),
-            );
             key(Modifiers::SHIFT, Key::ArrowLeft, Action::SeekBy(-10_000));
             key(Modifiers::SHIFT, Key::ArrowRight, Action::SeekBy(10_000));
             key(Modifiers::NONE, Key::Space, Action::TogglePlay);
@@ -186,6 +180,37 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
     }
 }
 
+/// Layouts can report ? as a named key, Shift+Slash, or only a text event.
+/// Consume the slash event too so help cannot accidentally focus search.
+fn consume_shortcut_help(events: &mut Vec<egui::Event>) -> bool {
+    let text_question = events
+        .iter()
+        .any(|event| matches!(event, egui::Event::Text(text) if text == "?"));
+    let question_key = |event: &egui::Event| match event {
+        egui::Event::Key {
+            key,
+            pressed: true,
+            modifiers,
+            ..
+        } => {
+            !modifiers.ctrl
+                && !modifiers.mac_cmd
+                && !modifiers.command
+                && !modifiers.alt
+                && (*key == Key::Questionmark
+                    || (*key == Key::Slash && (modifiers.shift || text_question)))
+        }
+        _ => false,
+    };
+    let requested = text_question || events.iter().any(question_key);
+    if requested {
+        events.retain(|event| {
+            !question_key(event) && !matches!(event, egui::Event::Text(text) if text == "?")
+        });
+    }
+    requested
+}
+
 /// Consume exact modifiers so Shift+G cannot become the first half of gg,
 /// and command shortcuts never become bare navigation keys.
 fn vim_commands(
@@ -215,6 +240,11 @@ fn vim_commands(
                     prefix = Some(now);
                 }
             }
+            return false;
+        }
+        if *modifiers == Modifiers::NONE && *key == Key::H && !repeat && prefix.is_some() {
+            prefix = None;
+            commands.push(Command::Home);
             return false;
         }
         prefix = None;
@@ -274,6 +304,8 @@ pub const SHORTCUTS: &[(&str, &str)] = &[
         "Vim keys: spatial card selection (h/l switch panes in track lists)",
     ),
     ("j / k", "Vim keys: select next / previous row"),
+    ("h (Home left edge)", "Vim keys: focus the sidebar"),
+    ("gh", "Vim keys: open Home"),
     (
         "l (sidebar)",
         "Vim keys: open selected entry and focus its content",
@@ -404,6 +436,60 @@ mod tests {
             assert_eq!(commands, vec![Command::PaneLeft, Command::PaneRight]);
             assert!(events.is_empty());
         }
+    }
+
+    #[test]
+    fn gh_opens_home_without_changing_gg_or_control_h() {
+        use super::super::navigation::Command;
+        let (commands, prefix) = vim_commands(
+            &mut vec![
+                event(Key::G, Modifiers::NONE, false),
+                event(Key::H, Modifiers::NONE, false),
+            ],
+            1.0,
+            None,
+        );
+        assert_eq!(commands, vec![Command::Home]);
+        assert_eq!(prefix, None);
+        let (commands, _) = vim_commands(
+            &mut vec![event(Key::H, Modifiers::CTRL, false)],
+            1.1,
+            Some(1.0),
+        );
+        assert_eq!(commands, vec![Command::PaneLeft]);
+        let (commands, _) = vim_commands(
+            &mut vec![event(Key::H, Modifiers::NONE, false)],
+            2.0,
+            Some(1.0),
+        );
+        assert_eq!(
+            commands,
+            vec![Command::Left],
+            "expired g must not open Home"
+        );
+    }
+
+    #[test]
+    fn question_mark_help_handles_key_and_text_layouts_without_stealing_slash() {
+        for mut events in [
+            vec![event(Key::Questionmark, Modifiers::NONE, false)],
+            vec![event(Key::Questionmark, Modifiers::SHIFT, false)],
+            vec![event(Key::Slash, Modifiers::SHIFT, false)],
+            vec![egui::Event::Text("?".into())],
+            vec![
+                event(Key::Slash, Modifiers::NONE, false),
+                egui::Event::Text("?".into()),
+            ],
+        ] {
+            assert!(consume_shortcut_help(&mut events));
+            assert!(events.is_empty());
+        }
+        let mut slash = vec![
+            event(Key::Slash, Modifiers::NONE, false),
+            egui::Event::Text("/".into()),
+        ];
+        assert!(!consume_shortcut_help(&mut slash));
+        assert_eq!(slash.len(), 2);
     }
 
     #[test]

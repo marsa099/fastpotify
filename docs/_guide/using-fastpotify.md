@@ -61,14 +61,19 @@ Use `Ctrl+h` and `Ctrl+l` to focus the visible library, main content, or queue
 pane. A rounded, two-point gray outline marks the active pane. These shortcuts
 leave input fields alone, including search and filters. In Vim mode they
 replace Home/Liked Songs on Linux and Windows; macOS Command shortcuts are
-unchanged. `j` and `k` select list rows in display order and scroll them into view. `gg` selects the first row; `G` (`Shift+g`) selects the
+unchanged. `gh` opens Home and focuses its content; press the two keys within
+750 ms. `?` opens the complete, scrollable shortcuts list without taking the
+question mark away from text inputs. `j` and `k` select list rows in display
+order and scroll them into view. `gg` selects the first row; `G` (`Shift+g`) selects the
 last. The two `g` presses must be within 750 ms, without another key between.
 `Ctrl+d` and `Ctrl+u` move half the visible pane height. These two shortcuts
 use Control on macOS too, not Command.
 
 In card grids and shelves, `h/j/k/l` move left/down/up/right. `l` never opens
 a card: use `o` or `Enter` to open it and focus the content pane. Cards outside
-the viewport scroll into view, including virtualized library grids. `gg/G`
+the viewport scroll into view, including virtualized library grids and cards
+inside horizontal shelves. On Home, `h` at the leftmost card moves focus to
+the sidebar if it is visible. `gg/G`
 select the first/last loaded card. On pages mixing tracks and cards, `j` below
 the last track enters the cards, and `k` above the first card returns to tracks.
 In track lists, bare `h/l` retain their pane-switching behavior. In the left

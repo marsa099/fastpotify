@@ -5756,6 +5756,12 @@ impl App {
 
     pub(crate) fn apply(&mut self, action: Action, ctx: &egui::Context) {
         match action {
+            Action::Navigate(crate::ui::navigation::Command::Home) => {
+                self.open(Page::Home);
+                self.navigation.pane = crate::ui::navigation::Pane::Main;
+                self.grid_navigation.active = true;
+                ctx.request_repaint();
+            }
             Action::Navigate(command) => {
                 use crate::ui::navigation::Pane;
                 let previous = self

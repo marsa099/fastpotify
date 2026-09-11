@@ -50,6 +50,7 @@ pub enum Command {
     Right,
     PaneLeft,
     PaneRight,
+    Home,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -97,6 +98,15 @@ pub fn pane_move(app: &App, command: Command, pane: Pane) -> Option<bool> {
     match command {
         Command::PaneLeft => Some(false),
         Command::PaneRight => Some(true),
+        Command::Left
+            if pane == Pane::Main
+                && app.page() == &Page::Home
+                && app.settings.sidebar_visible
+                && app.grid_navigation.active_on(app.page())
+                && app.grid_navigation.at_left_edge() =>
+        {
+            Some(false)
+        }
         // The sidebar resolves l against its selected entry before focusing
         // the content pane. Ctrl+l remains a pure pane switch.
         Command::Right if pane == Pane::Sidebar => None,
@@ -202,7 +212,7 @@ pub fn view(
     let mut commands = Vec::new();
     for action in &app.actions {
         if let Action::Navigate(command) = action {
-            if active == pane && !grid_active {
+            if active == pane && !grid_active && *command != Command::Home {
                 commands.push(*command);
             }
             if let Some(right) = pane_move(app, *command, active) {
@@ -1119,6 +1129,190 @@ mod tests {
                 !actions
                     .iter()
                     .any(|action| matches!(action, Action::Open(_)))
+            );
+        });
+    }
+
+    #[test]
+    fn home_left_edge_focuses_the_sidebar_but_other_grids_stay_put() {
+        with_app(|app, ctx| {
+            app.open(Page::Home);
+            frame(app, ctx, vec![]);
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            press(app, ctx, egui::Key::L, egui::Modifiers::NONE);
+            press(app, ctx, egui::Key::H, egui::Modifiers::NONE);
+            assert_eq!(app.navigation.pane, Pane::Main);
+            press(app, ctx, egui::Key::H, egui::Modifiers::NONE);
+            assert_eq!(app.navigation.pane, Pane::Sidebar);
+            assert_eq!(app.page(), &Page::Home);
+
+            app.navigation.pane = Pane::Main;
+            app.settings.sidebar_visible = false;
+            frame(app, ctx, vec![]);
+            press(app, ctx, egui::Key::H, egui::Modifiers::NONE);
+            assert_eq!(app.navigation.pane, Pane::Main);
+            app.settings.sidebar_visible = true;
+            app.open(Page::Albums);
+            frame(app, ctx, vec![]);
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            press(app, ctx, egui::Key::H, egui::Modifiers::NONE);
+            assert_eq!(app.navigation.pane, Pane::Main);
+        });
+    }
+
+    fn settle_grid(app: &mut App, ctx: &egui::Context) -> egui::Rect {
+        let mut viewport = egui::Rect::NOTHING;
+        for _ in 0..30 {
+            for action in frame(app, ctx, vec![]) {
+                if let Action::GridViewport(rect) = action {
+                    viewport = rect;
+                }
+            }
+        }
+        viewport
+    }
+
+    #[test]
+    fn home_selected_cards_scroll_through_nested_shelves_on_both_axes() {
+        with_app(|app, ctx| {
+            app.open(Page::Home);
+            app.show_queue_panel = true;
+            frame(app, ctx, vec![]);
+            let selected = |app: &App| {
+                app.grid_navigation
+                    .cards
+                    .iter()
+                    .find(|card| Some(card.id) == app.grid_navigation.selected)
+                    .unwrap()
+                    .clone()
+            };
+            for _ in 0..10 {
+                press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+                let viewport = settle_grid(app, ctx);
+                let card = selected(app);
+                assert!(
+                    card.rect.top() >= viewport.top() - 1.0
+                        && card.rect.bottom() <= viewport.bottom() + 1.0,
+                    "selected card must follow vertical scrolling: {:?} in {viewport:?}",
+                    card.rect
+                );
+            }
+            // Recent plays form a long horizontal shelf nested in the page.
+            let recent = app
+                .grid_navigation
+                .cards
+                .iter()
+                .find(|card| matches!(card.page, Page::Album(_)))
+                .unwrap()
+                .id;
+            app.grid_navigation.selected = Some(recent);
+            app.grid_navigation.scroll = Some(recent);
+            settle_grid(app, ctx);
+            for _ in 0..6 {
+                press(app, ctx, egui::Key::L, egui::Modifiers::NONE);
+                let viewport = settle_grid(app, ctx);
+                assert!(
+                    viewport.contains_rect(selected(app).rect.shrink(1.0)),
+                    "horizontal and vertical scrolling must both keep the card visible"
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn gh_opens_home_and_restores_main_pane_grid_navigation() {
+        with_app(|app, ctx| {
+            for page in [Page::Playlist("pl1".into()), Page::Home] {
+                app.open(page);
+                app.navigation.pane = Pane::Sidebar;
+                frame(app, ctx, vec![]);
+                frame(
+                    app,
+                    ctx,
+                    [
+                        (egui::Key::G, false),
+                        (egui::Key::H, false),
+                        (egui::Key::G, true),
+                        (egui::Key::H, true),
+                    ]
+                    .into_iter()
+                    .map(|(key, pressed)| egui::Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    })
+                    .collect(),
+                );
+                assert_eq!(app.page(), &Page::Home);
+                assert_eq!(app.navigation.pane, Pane::Main);
+                frame(app, ctx, vec![]);
+                assert!(app.grid_navigation.active_on(&Page::Home));
+            }
+        });
+    }
+
+    #[test]
+    fn question_mark_opens_shortcuts_without_focusing_search_in_either_mode() {
+        for vim in [false, true] {
+            for events in [
+                vec![egui::Event::Text("?".into())],
+                vec![
+                    egui::Event::Key {
+                        key: egui::Key::Slash,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::SHIFT,
+                    },
+                    egui::Event::Text("?".into()),
+                ],
+            ] {
+                with_app(|app, ctx| {
+                    app.settings.vim_keys = vim;
+                    let actions = frame(app, ctx, events);
+                    assert!(matches!(app.dialog, Some(crate::model::Dialog::Shortcuts)));
+                    assert_eq!(
+                        actions
+                            .iter()
+                            .filter(|action| matches!(
+                                action,
+                                Action::ShowDialog(crate::model::Dialog::Shortcuts)
+                            ))
+                            .count(),
+                        1
+                    );
+                    assert!(
+                        !actions
+                            .iter()
+                            .any(|action| matches!(action, Action::FocusSearch))
+                    );
+                });
+            }
+        }
+        with_app(|app, ctx| {
+            ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("help-typing-test")));
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events: vec![egui::Event::Text("?".into())],
+                    ..Default::default()
+                },
+                |_ui| {
+                    super::super::keys::handle(app, ctx);
+                    assert!(ctx.input(|input| {
+                        input
+                            .events
+                            .iter()
+                            .any(|event| matches!(event, egui::Event::Text(text) if text == "?"))
+                    }));
+                },
+            );
+            output.textures_delta.clear();
+            assert!(
+                !app.actions
+                    .iter()
+                    .any(|action| matches!(action, Action::ShowDialog(_)))
             );
         });
     }

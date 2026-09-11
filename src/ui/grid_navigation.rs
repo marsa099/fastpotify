@@ -32,6 +32,12 @@ impl GridNavigation {
         self.page.as_ref() == Some(page) && self.active && !self.cards.is_empty()
     }
 
+    pub fn at_left_edge(&self) -> bool {
+        self.selected
+            .and_then(|id| self.cards.iter().position(|card| card.id == id))
+            .is_none_or(|index| neighbor(&self.cards, index, Command::Left).is_none())
+    }
+
     /// Install a complete frame before resolving its keys. Updating geometry
     /// first prevents activation of a card removed by filtering or a response.
     pub fn prepare(&mut self, actions: &[Action]) {
@@ -60,7 +66,7 @@ impl GridNavigation {
         self.viewport_height = actions
             .iter()
             .find_map(|action| match action {
-                Action::GridViewport(height) => Some(*height),
+                Action::GridViewport(rect) => Some(rect.height()),
                 _ => None,
             })
             .unwrap_or(0.0);
@@ -227,8 +233,9 @@ fn register(app: &mut App, ui: &mut egui::Ui, response: &egui::Response, page: P
     {
         super::navigation::outline(ui, response.rect);
         if app.grid_navigation.scroll == Some(id) {
+            // The enclosing horizontal shelf handles its own x scroll. The
+            // page repeats the request after all nested scroll areas close.
             response.scroll_to_me(None);
-            app.actions.push(Action::GridScrolled(id));
         }
     }
 }
@@ -264,10 +271,31 @@ pub fn virtual_cards(app: &mut App, ui: &mut egui::Ui, pages: &[Page], height: f
             rect,
             response: None,
         }));
-        if app.grid_navigation.selected == Some(id) && app.grid_navigation.scroll == Some(id) {
-            ui.scroll_to_rect(rect, None);
-            app.actions.push(Action::GridScrolled(id));
-        }
+    }
+}
+
+/// Nested egui ScrollAreas consume both axes, including disabled axes. A card
+/// inside a horizontal shelf therefore cannot scroll the outer page itself.
+/// Repeat its current-frame rectangle at the outer vertical scroll boundary.
+pub fn scroll_page(app: &mut App, ui: &mut egui::Ui) {
+    if !app.settings.vim_keys
+        || !app.grid_navigation.active_on(app.page())
+        || app
+            .navigation
+            .active_pane(app.settings.sidebar_visible, app.show_queue_panel)
+            != Pane::Main
+    {
+        return;
+    }
+    let Some(id) = app.grid_navigation.scroll else {
+        return;
+    };
+    if let Some(rect) = app.actions.iter().rev().find_map(|action| match action {
+        Action::GridCard(card) if card.id == id => Some(card.rect),
+        _ => None,
+    }) {
+        ui.scroll_to_rect(rect, None);
+        app.actions.push(Action::GridScrolled(id));
     }
 }
 

@@ -708,7 +708,7 @@ pub struct Toast {
 pub enum Action {
     Navigate(crate::ui::navigation::Command),
     GridFrame(Page),
-    GridViewport(f32),
+    GridViewport(egui::Rect),
     GridRows,
     GridCard(crate::ui::grid_navigation::Card),
     GridScrolled(egui::Id),
