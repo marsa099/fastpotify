@@ -273,7 +273,8 @@ and dialogs, including `Ctrl+h` and `Ctrl+l` while an input is focused.
 | Shortcut | What it does |
 | --- | --- |
 | `Ctrl+h` / `Ctrl+l` | Focus the visible pane to the left / right: library, main content, queue |
-| `h` / `j` / `k` / `l` | Move left / down / up / right between cards; `h/l` still switch panes in lists |
+| `h` / `j` / `k` / `l` | Move left / down / up / right between cards; `h/l` still switch panes in track lists |
+| `l` in the sidebar | Open the selected entry and focus its content; folders toggle without leaving the sidebar |
 | `j` / `k` | Select the next / previous list row and scroll it into view |
 | `gg` / `G` (`Shift+g`) | First / last row; lazy-loaded lists fetch remaining pages for `G`. In grids, first / last loaded card |
 | `Ctrl+d` / `Ctrl+u` | Move half the pane's visible height, also using Control on macOS |
@@ -286,7 +287,9 @@ Works in collection tables, search-result song lists, artist Popular tracks,
 the library sidebar, and the queue and Recent panel. Cards are supported on
 Home (including shelves), library grids, search-result grids, and artist pages.
 `l` moves right in a grid, never opens a card. `o` or `Enter` opens it with
-focus in the content pane. On mixed track/card pages, `j` below the last track
+focus in the content pane. In the left sidebar, `l` opens the selected playlist
+(or other entry) and focuses its content. With no selection, `l` does nothing;
+`Ctrl+l` always remains a pane-only switch. On mixed track/card pages, `j` below the last track
 enters the cards; `k` above the first card returns to the tracks.
 
 The focused pane has a rounded gray outline. `Ctrl+h/l` use Control on macOS

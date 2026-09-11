@@ -71,7 +71,10 @@ a card: use `o` or `Enter` to open it and focus the content pane. Cards outside
 the viewport scroll into view, including virtualized library grids. `gg/G`
 select the first/last loaded card. On pages mixing tracks and cards, `j` below
 the last track enters the cards, and `k` above the first card returns to tracks.
-In lists, bare `h/l` retain their pane-switching behavior.
+In track lists, bare `h/l` retain their pane-switching behavior. In the left
+sidebar, `l` opens the selected playlist or other entry and focuses its
+content. A selected folder toggles without moving focus. With no selection,
+`l` does nothing. `Ctrl+l` switches panes without opening the selected entry.
 
 `Enter` plays the selected song in a track list. In the library it opens the selected entry
 or expands/collapses a folder. `o` opens a song's album, an episode's show,

@@ -271,9 +271,13 @@ pub const SHORTCUTS: &[(&str, &str)] = &[
     ("L (Shift+L with Vim keys)", "Show the lyrics"),
     (
         "h / j / k / l",
-        "Vim keys: spatial card selection (h/l switch panes in lists)",
+        "Vim keys: spatial card selection (h/l switch panes in track lists)",
     ),
     ("j / k", "Vim keys: select next / previous row"),
+    (
+        "l (sidebar)",
+        "Vim keys: open selected entry and focus its content",
+    ),
     (
         "Control+h / Control+l",
         "Vim keys: switch panes (not in inputs; replaces Home/Liked Songs on Linux/Windows)",

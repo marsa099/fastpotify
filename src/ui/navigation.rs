@@ -97,6 +97,9 @@ pub fn pane_move(app: &App, command: Command, pane: Pane) -> Option<bool> {
     match command {
         Command::PaneLeft => Some(false),
         Command::PaneRight => Some(true),
+        // The sidebar resolves l against its selected entry before focusing
+        // the content pane. Ctrl+l remains a pure pane switch.
+        Command::Right if pane == Pane::Sidebar => None,
         Command::Left | Command::Right
             if pane != Pane::Main || !app.grid_navigation.active_on(app.page()) =>
         {
@@ -1073,6 +1076,50 @@ mod tests {
                         .any(|action| matches!(action, Action::Navigate(_) | Action::Open(_)))
                 );
             }
+        });
+    }
+
+    #[test]
+    fn sidebar_l_opens_the_selected_playlist_and_focuses_its_tracks() {
+        with_app(|app, ctx| {
+            app.open(Page::Home);
+            app.navigation.pane = Pane::Sidebar;
+            frame(app, ctx, vec![]);
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            let selected = app.navigation.cursor(Pane::Sidebar).key.unwrap();
+
+            // Ctrl+l only changes panes, even with a playlist selected.
+            press(app, ctx, egui::Key::L, egui::Modifiers::CTRL);
+            assert_eq!(app.page(), &Page::Home);
+            assert_eq!(app.navigation.pane, Pane::Main);
+            press(app, ctx, egui::Key::H, egui::Modifiers::CTRL);
+
+            press(app, ctx, egui::Key::L, egui::Modifiers::NONE);
+            let Page::Playlist(id) = app.page() else {
+                panic!("l must open the selected playlist");
+            };
+            assert_eq!(selected, egui::Id::new(format!("spotify:playlist:{id}")));
+            assert_eq!(app.navigation.pane, Pane::Main);
+            press(app, ctx, egui::Key::J, egui::Modifiers::NONE);
+            assert_eq!(app.navigation.cursor(Pane::Main).row, Some(0));
+        });
+    }
+
+    #[test]
+    fn sidebar_l_without_selection_does_not_open_an_arbitrary_playlist() {
+        with_app(|app, ctx| {
+            app.open(Page::Home);
+            app.navigation.pane = Pane::Sidebar;
+            frame(app, ctx, vec![]);
+            let actions = press(app, ctx, egui::Key::L, egui::Modifiers::NONE);
+            assert_eq!(app.page(), &Page::Home);
+            assert_eq!(app.navigation.pane, Pane::Sidebar);
+            assert!(
+                !actions
+                    .iter()
+                    .any(|action| matches!(action, Action::Open(_)))
+            );
         });
     }
 

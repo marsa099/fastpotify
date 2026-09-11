@@ -884,15 +884,23 @@ fn contents(app: &mut App, ui: &mut egui::Ui) {
             if let Some(row) = navigation.cursor.row
                 && matches!(
                     navigation.command,
-                    Some(super::navigation::Command::Play | super::navigation::Command::Open)
+                    Some(
+                        super::navigation::Command::Play
+                            | super::navigation::Command::Open
+                            | super::navigation::Command::Right
+                    )
                 )
             {
                 let entry = &entries[row];
-                app.actions.push(if let Some((id, _, _)) = &entry.folder {
-                    Action::ToggleLibraryFolder(id.clone())
+                if let Some((id, _, _)) = &entry.folder {
+                    app.actions.push(Action::ToggleLibraryFolder(id.clone()));
                 } else {
-                    Action::Open(entry.page.clone())
-                });
+                    app.actions.push(Action::Open(entry.page.clone()));
+                    if navigation.command == Some(super::navigation::Command::Right) {
+                        app.actions
+                            .push(Action::NavigationFocus(super::navigation::Pane::Main));
+                    }
+                }
             }
             if navigation.focused
                 && navigation.cursor.end
