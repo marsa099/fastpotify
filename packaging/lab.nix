@@ -3,7 +3,7 @@
 # Install: nix profile install --impure --file packaging/lab.nix
 {
   system ? builtins.currentSystem,
-  fork ? builtins.getFlake "github:marsa099/fastpotify/7dfde7013fafe8abc754fd9cd47a75ebd5566e8e",
+  fork ? builtins.getFlake "github:marsa099/fastpotify/f5c7759cebe4f98ae01c127d7662f79815d77db2",
 }:
 let
   pkgs = import fork.inputs.nixpkgs { inherit system; };
