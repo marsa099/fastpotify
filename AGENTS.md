@@ -120,6 +120,20 @@ maintainer approval and an exact force-with-lease guard; keep a recovery ref.
 - Report platform coverage honestly. Do not claim a platform was tested when
   it was only compiled or reasoned about.
 
+## Local Lab iteration in this fork
+
+Use the cached development workflow in `packaging/LAB.md` for ordinary local
+UI iterations. From a task worktree, run `fastpotify-lab-update "$PWD"`, or
+`bash packaging/update-lab-dev.sh "$PWD"`. It checks and builds isolated Lab
+sources with a persistent Cargo cache, then atomically selects the new binary.
+The installed launcher, settings, and credential profile stay the same.
+Let the tester restart the application; the updater never opens or closes it.
+
+Do not rebuild the full `packaging/lab.nix` package for every UI edit. Keep that
+package for reproducible checkpoints or explicit packaging validation. The fast
+updater does not replace the full contribution checks before publishing changes.
+New source files must be tracked for Nix's Git source snapshot to include them.
+
 ## Releases
 
 A release is not the tag alone. Do these in order:
