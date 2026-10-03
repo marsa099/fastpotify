@@ -109,6 +109,10 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
                 Action::ToggleQueuePanel,
             );
         }
+        if !blocked {
+            key(Modifiers::ALT, Key::H, Action::SeekBy(-10_000));
+            key(Modifiers::ALT, Key::L, Action::SeekBy(10_000));
+        }
         if !typing {
             key(Modifiers::SHIFT, Key::ArrowLeft, Action::SeekBy(-10_000));
             key(Modifiers::SHIFT, Key::ArrowRight, Action::SeekBy(10_000));
@@ -288,7 +292,7 @@ pub const SHORTCUTS: &[(&str, &str)] = &[
         platform_shortcut("Ctrl+←  /  Ctrl+→", "Cmd+←  /  Cmd+→"),
         "Previous or next",
     ),
-    ("Shift+←  /  Shift+→", "Seek 10 seconds"),
+    ("Alt+H / Alt+L or Shift+← / Shift+→", "Seek 10 seconds"),
     (
         platform_shortcut("Ctrl+↑  /  Ctrl+↓", "Cmd+↑  /  Cmd+↓"),
         "Volume up or down",
@@ -538,6 +542,77 @@ mod tests {
             assert_eq!(label("Home"), "Ctrl+H");
             assert_eq!(label("Winamp mini player"), "Ctrl+M");
         }
+    }
+
+    #[test]
+    fn alt_h_l_seek_in_both_modes_without_stealing_focused_or_modal_input() {
+        let root = std::env::temp_dir().join(format!(
+            "fastpotify-seek-shortcut-test-{}",
+            std::process::id()
+        ));
+        let mut app = App::new(
+            &crate::backend::Waker::default(),
+            AppDirs {
+                config: root.join("config"),
+                state: root.join("state"),
+                cache: root.join("cache"),
+            },
+            Settings::default(),
+            AppOptions {
+                media_controls: false,
+                restore_sign_in: false,
+                tray: false,
+            },
+        );
+        for vim in [false, true] {
+            app.settings.vim_keys = vim;
+            for (key, delta) in [(Key::H, -10_000), (Key::L, 10_000)] {
+                // Normal, focused control, dialog, device picker, and help.
+                for blocked_case in 0..5 {
+                    let ctx = egui::Context::default();
+                    if blocked_case == 1 {
+                        ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("input")));
+                    }
+                    app.dialog = (blocked_case == 2).then_some(Dialog::Shortcuts);
+                    app.show_devices = blocked_case == 3;
+                    app.actions.clear();
+                    let mut events = vec![event(key, Modifiers::ALT, false)];
+                    if blocked_case == 4 {
+                        events.push(event(Key::Questionmark, Modifiers::NONE, false));
+                    }
+                    let mut output = ctx.run_ui(
+                        egui::RawInput {
+                            events,
+                            ..Default::default()
+                        },
+                        |_ui| handle(&mut app, &ctx),
+                    );
+                    output.textures_delta.clear();
+                    if blocked_case == 0 {
+                        assert!(
+                            matches!(
+                                app.actions.last(),
+                                Some(Action::SeekBy(value)) if *value == delta
+                            ),
+                            "vim={vim}, key={key:?}"
+                        );
+                        assert!(!app.actions.iter().any(|action| matches!(
+                            action,
+                            Action::Navigate(_) | Action::ToggleLyricsPanel
+                        )));
+                    } else {
+                        assert!(
+                            !app.actions
+                                .iter()
+                                .any(|action| matches!(action, Action::SeekBy(_))),
+                            "vim={vim}, key={key:?}, blocked={blocked_case}"
+                        );
+                    }
+                }
+            }
+        }
+        app.backend.shutdown();
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

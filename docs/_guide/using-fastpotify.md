@@ -45,7 +45,10 @@ Left and right arrows adjust a focused volume slider by five percentage
 points, or the seek slider by one percent of the song. Screen readers can
 also read and set these sliders' values. `Ctrl+F` (`Cmd+F` on macOS) focuses
 search. The playback shortcuts remain available; unmodified letter and
-Space shortcuts yield to the focused control.
+Space shortcuts yield to the focused control. `Alt+H` rewinds 10 seconds and
+`Alt+L` seeks forward 10 seconds, with Vim keys on or off. These shortcuts
+yield to focused controls, menus, and dialogs. On macOS, use Option for Alt.
+The existing `Shift+←` and `Shift+→` seek shortcuts remain available.
 
 This is the first part of screen-reader support. Windows testing with NVDA
 remains tracked in [#262](https://github.com/crmne/fastpotify/issues/262).

@@ -245,7 +245,7 @@ still in progress.
 | --- | --- |
 | `Space` | Play or pause |
 | `Ctrl+←` / `Ctrl+→` | Previous or next |
-| `Shift+←` / `Shift+→` | Seek 10 seconds |
+| `Alt+H` / `Alt+L` or `Shift+←` / `Shift+→` | Seek backward / forward 10 seconds |
 | `Ctrl+↑` / `Ctrl+↓` | Volume |
 | `M` | Mute |
 | `B` | Like or unlike the playing song |
